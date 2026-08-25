@@ -5,16 +5,13 @@ databases:
     user: pathtoskill
 
 services:
-  # Single combined service: Express serves both the API (under /api) and the built
-  # React app. This keeps the deployment to 2 Render services total (this + the database),
-  # which fits accounts on the free plan's service limit. See README for the alternative
-  # split (separate static site) deployment if you have room for a 3rd service.
   - type: web
-    name: pathtoskill
+    name: pathtoskill-api
     runtime: node
     plan: free
-    buildCommand: npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend && cp -r frontend/dist backend/public
-    startCommand: npm run db:migrate --prefix backend && npm start --prefix backend
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm run db:migrate && npm start
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -28,5 +25,25 @@ services:
         value: production
       - key: RESET_TOKEN_EXPIRES_MINUTES
         value: 30
+      - key: CLIENT_ORIGIN
+        sync: false # set to the frontend Static Site's URL after it's created
+      - key: FRONTEND_URL
+        sync: false # same value as CLIENT_ORIGIN - used to build the emailed reset link
+      - key: RESEND_API_KEY
+        sync: false # from https://resend.com - leave unset to fall back to dev-mode token logging
+      - key: MAIL_FROM
+        value: "PathToSkill <onboarding@resend.dev>"
+
+  - type: web
+    name: pathtoskill
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
       - key: VITE_API_BASE_URL
-        value: /api
+        sync: false # set to https://<pathtoskill-api-url>/api
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

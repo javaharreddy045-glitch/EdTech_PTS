@@ -13,7 +13,10 @@ const PUBLIC_NAV_LINKS = [
 
 const AUTHENTICATED_NAV_LINKS = [
   { to: '/dashboard', label: 'Dashboard' },
-  ...PUBLIC_NAV_LINKS,
+  { to: '/learning-path', label: 'My Paths' },
+  { to: '/courses', label: 'Courses' },
+  { to: '/journeys', label: 'Journeys' },
+  { to: '/projects', label: 'Projects' },
   { to: '/progress', label: 'Progress' },
 ];
 

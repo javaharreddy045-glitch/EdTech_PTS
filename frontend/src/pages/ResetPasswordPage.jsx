@@ -9,6 +9,7 @@ export function ResetPasswordPage() {
   const navigate = useNavigate();
   const [token, setToken] = useState(searchParams.get('token') || '');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -18,6 +19,10 @@ export function ResetPasswordPage() {
     setError('');
     if (password.length < 8) {
       setError('Password must be at least 8 characters long.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
       return;
     }
     setIsSubmitting(true);
@@ -60,6 +65,16 @@ export function ResetPasswordPage() {
             minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+          />
+          <TextField
+            id="confirmPassword"
+            label="Confirm new password"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
           />
           {error && (
             <p role="alert" className="text-sm text-danger">

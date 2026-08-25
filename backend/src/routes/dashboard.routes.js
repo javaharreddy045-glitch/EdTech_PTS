@@ -5,6 +5,68 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 
+// Summarizes one followed journey independently: its own progress, next step, and last activity.
+// Following additional journeys never touches this - each path's numbers come only from its own data.
+async function buildActivePathSummary(userId, uj) {
+  const journeyId = uj.journey_id;
+
+  const [{ rows: courseRows }, { rows: projectRows }, { rows: activityRows }] = await Promise.all([
+    query(
+      `SELECT c.id, c.title, c.slug, c.difficulty, c.duration_hours, jc.order_index,
+              COALESCE(e.status, 'not_started') AS status, COALESCE(e.progress_percent, 0) AS progress_percent
+       FROM journey_courses jc JOIN courses c ON c.id = jc.course_id
+       LEFT JOIN enrollments e ON e.course_id = c.id AND e.user_id = $1
+       WHERE jc.journey_id = $2 ORDER BY jc.order_index`,
+      [userId, journeyId]
+    ),
+    query(
+      `SELECT p.id, p.title, p.slug, p.difficulty, p.estimated_hours, jp.order_index,
+              COALESCE(up.status, 'not_started') AS status
+       FROM journey_projects jp JOIN projects p ON p.id = jp.project_id
+       LEFT JOIN user_projects up ON up.project_id = p.id AND up.user_id = $1
+       WHERE jp.journey_id = $2 ORDER BY jp.order_index`,
+      [userId, journeyId]
+    ),
+    query(
+      `SELECT GREATEST(
+         COALESCE((SELECT MAX(lp.completed_at) FROM lesson_progress lp
+                     JOIN lessons l ON l.id = lp.lesson_id
+                     JOIN journey_courses jc ON jc.course_id = l.course_id
+                    WHERE jc.journey_id = $2 AND lp.user_id = $1 AND lp.completed = true), $3),
+         COALESCE((SELECT MAX(up.completed_at) FROM user_projects up
+                     JOIN journey_projects jp ON jp.project_id = up.project_id
+                    WHERE jp.journey_id = $2 AND up.user_id = $1 AND up.completed_at IS NOT NULL), $3)
+       ) AS last_activity_at`,
+      [userId, journeyId, uj.started_at]
+    ),
+  ]);
+
+  const totalSteps = courseRows.length + projectRows.length;
+  const completedSteps = courseRows.filter((c) => c.status === 'completed').length
+    + projectRows.filter((p) => p.status === 'completed').length;
+  const overallProgress = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+
+  const nextCourse = courseRows.find((c) => c.status !== 'completed');
+  const nextProject = !nextCourse ? projectRows.find((p) => p.status !== 'completed') : null;
+  const nextStep = nextCourse
+    ? { type: 'course', title: nextCourse.title, slug: nextCourse.slug, difficulty: nextCourse.difficulty, durationHours: nextCourse.duration_hours, progressPercent: nextCourse.progress_percent }
+    : nextProject
+      ? { type: 'project', title: nextProject.title, slug: nextProject.slug, difficulty: nextProject.difficulty, durationHours: nextProject.estimated_hours }
+      : null;
+
+  return {
+    id: journeyId,
+    title: uj.title,
+    slug: uj.slug,
+    outcome: uj.outcome,
+    totalSteps,
+    completedSteps,
+    overallProgress,
+    nextStep,
+    lastActivityAt: activityRows[0]?.last_activity_at || uj.started_at,
+  };
+}
+
 router.get('/me', requireAuth, asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
@@ -22,40 +84,46 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
   const skillIds = userSkillRows.map((s) => s.id);
 
   const { rows: activeJourneyRows } = await query(
-    `SELECT j.id, j.title, j.slug, j.outcome,
-            (SELECT COUNT(*)::int FROM journey_courses jc WHERE jc.journey_id = j.id) AS total_courses,
-            (SELECT COUNT(*)::int FROM journey_courses jc JOIN enrollments e
-               ON e.course_id = jc.course_id AND e.user_id = $1 AND e.status = 'completed'
-             WHERE jc.journey_id = j.id) AS completed_courses
+    `SELECT uj.journey_id, uj.started_at, j.title, j.slug, j.outcome
      FROM user_journeys uj JOIN learning_journeys j ON j.id = uj.journey_id
-     WHERE uj.user_id = $1 AND uj.status = 'active' ORDER BY uj.started_at DESC LIMIT 1`,
-    [userId]
-  );
-  const currentJourney = activeJourneyRows[0] || null;
-
-  const { rows: continueLearning } = await query(
-    `SELECT c.id, c.title, c.slug, c.image_url, e.progress_percent
-     FROM enrollments e JOIN courses c ON c.id = e.course_id
-     WHERE e.user_id = $1 AND e.status = 'active'
-     ORDER BY e.enrolled_at DESC LIMIT 1`,
+     WHERE uj.user_id = $1 AND uj.status = 'active'
+     ORDER BY uj.started_at DESC`,
     [userId]
   );
 
-  const { rows: recommendedCourses } = await query(
-    `SELECT c.id, c.title, c.slug, c.image_url, c.difficulty, c.duration_hours, c.rating_avg
+  const activePaths = await Promise.all(activeJourneyRows.map((uj) => buildActivePathSummary(userId, uj)));
+  activePaths.sort((a, b) => new Date(b.lastActivityAt) - new Date(a.lastActivityAt));
+
+  const overallLearningProgress = activePaths.length > 0
+    ? Math.round(activePaths.reduce((sum, p) => sum + p.overallProgress, 0) / activePaths.length)
+    : 0;
+
+  // Recommendations prefer each active path's own next step (with a reason tying it back to
+  // that path), then top up with generic top-rated items the learner hasn't started yet.
+  const pathCourseRecs = activePaths
+    .filter((p) => p.nextStep?.type === 'course')
+    .map((p) => ({ title: p.nextStep.title, slug: p.nextStep.slug, difficulty: p.nextStep.difficulty, duration_hours: p.nextStep.durationHours, journeyTitle: p.title }));
+  const pathProjectRecs = activePaths
+    .filter((p) => p.nextStep?.type === 'project')
+    .map((p) => ({ title: p.nextStep.title, slug: p.nextStep.slug, difficulty: p.nextStep.difficulty, estimated_hours: p.nextStep.durationHours, journeyTitle: p.title }));
+
+  const { rows: fallbackCourses } = await query(
+    `SELECT c.title, c.slug, c.difficulty, c.duration_hours
      FROM courses c
      WHERE NOT EXISTS (SELECT 1 FROM enrollments e WHERE e.user_id = $1 AND e.course_id = c.id)
      ORDER BY c.rating_avg DESC, c.learner_count DESC LIMIT 4`,
     [userId]
   );
-
-  const { rows: recommendedProjects } = await query(
-    `SELECT p.id, p.title, p.slug, p.image_url, p.difficulty, p.estimated_hours
+  const { rows: fallbackProjects } = await query(
+    `SELECT p.title, p.slug, p.difficulty, p.estimated_hours
      FROM projects p
      WHERE NOT EXISTS (SELECT 1 FROM user_projects up WHERE up.user_id = $1 AND up.project_id = p.id)
      ORDER BY p.title LIMIT 4`,
     [userId]
   );
+
+  const recommendedCourses = dedupeBySlug([...pathCourseRecs, ...fallbackCourses]).slice(0, 2);
+  const recommendedProjects = dedupeBySlug([...pathProjectRecs, ...fallbackProjects]).slice(0, 2);
 
   const { rows: similarJourneys } = await query(
     `SELECT j.id, j.title, j.slug, j.learner_label, j.outcome, j.duration_weeks,
@@ -64,8 +132,9 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
             (SELECT COUNT(*)::int FROM journey_courses jc WHERE jc.journey_id = j.id) AS course_count,
             (SELECT COUNT(*)::int FROM journey_projects jp WHERE jp.journey_id = j.id) AS project_count
      FROM learning_journeys j
+     WHERE j.id NOT IN (SELECT journey_id FROM user_journeys WHERE user_id = $3)
      ORDER BY goal_match DESC, skill_overlap DESC LIMIT 3`,
-    [profile?.goal_id || null, skillIds.length ? skillIds : [0]]
+    [profile?.goal_id || null, skillIds.length ? skillIds : [0], userId]
   );
 
   for (const j of similarJourneys) {
@@ -89,43 +158,44 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
      SELECT 'project_completed' AS kind, p.title AS label, up.completed_at AS occurred_at
      FROM user_projects up JOIN projects p ON p.id = up.project_id
      WHERE up.user_id = $1 AND up.status = 'completed'
-     ORDER BY occurred_at DESC NULLS LAST LIMIT 6`,
+     UNION ALL
+     SELECT 'assessment_taken' AS kind, a.title AS label, ar.taken_at AS occurred_at
+     FROM assessment_results ar JOIN assessments a ON a.id = ar.assessment_id
+     WHERE ar.user_id = $1
+     ORDER BY occurred_at DESC NULLS LAST LIMIT 5`,
     [userId]
   );
-
-  let upcomingMilestone = null;
-  if (currentJourney) {
-    const remaining = currentJourney.total_courses - currentJourney.completed_courses;
-    upcomingMilestone = remaining > 0
-      ? `${remaining} course(s) left to finish "${currentJourney.title}"`
-      : `All courses complete — finish remaining projects in "${currentJourney.title}"`;
-  }
 
   const { rows: overallStats } = await query(
     `SELECT
        (SELECT COUNT(*) FILTER (WHERE status = 'completed')::int FROM enrollments WHERE user_id = $1) AS completed_courses,
-       (SELECT COUNT(*)::int FROM enrollments WHERE user_id = $1) AS total_enrollments,
-       (SELECT COUNT(*) FILTER (WHERE status = 'completed')::int FROM user_projects WHERE user_id = $1) AS completed_projects`,
+       (SELECT COUNT(*) FILTER (WHERE status = 'completed')::int FROM user_projects WHERE user_id = $1) AS completed_projects,
+       (SELECT COUNT(*)::int FROM user_skills WHERE user_id = $1) AS skills_gained`,
     [userId]
   );
-  const stats = overallStats[0];
-  const overallProgress = currentJourney && currentJourney.total_courses > 0
-    ? Math.round((currentJourney.completed_courses / currentJourney.total_courses) * 100)
-    : 0;
 
   res.json({
     goal: profile?.goal_title || null,
     currentLevel: profile?.current_level || null,
-    overallProgress,
-    currentJourney,
-    continueLearning: continueLearning[0] || null,
+    activePaths,
+    overallLearningProgress,
     recommendedCourses,
     recommendedProjects,
     similarJourneys,
     recentActivity,
-    upcomingMilestone,
-    stats,
+    stats: overallStats[0],
   });
 }));
+
+function dedupeBySlug(items) {
+  const seen = new Set();
+  const result = [];
+  for (const item of items) {
+    if (seen.has(item.slug)) continue;
+    seen.add(item.slug);
+    result.push(item);
+  }
+  return result;
+}
 
 export default router;

@@ -13,7 +13,7 @@ export function JourneyDetailPage() {
   const { isAuthenticated } = useAuth();
   const [journey, setJourney] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isFollowing, setIsFollowing] = useState(false);
+  const [followStatus, setFollowStatus] = useState(null);
   const [isSaved, setIsSaved] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -24,7 +24,7 @@ export function JourneyDetailPage() {
       .getBySlug(slug)
       .then((data) => {
         setJourney(data.journey);
-        setIsFollowing(data.journey.isFollowing);
+        setFollowStatus(data.journey.followStatus);
         setIsSaved(data.journey.isSaved);
       })
       .finally(() => setIsLoading(false));
@@ -35,8 +35,30 @@ export function JourneyDetailPage() {
     setIsSubmitting(true);
     try {
       await journeysApi.follow(slug);
-      setIsFollowing(true);
-      setActionMessage('This journey is now your active learning path.');
+      setFollowStatus('active');
+      setActionMessage('This journey has been added to My Learning Paths — following it never removes your other journeys.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handlePause() {
+    setIsSubmitting(true);
+    try {
+      await journeysApi.unfollow(slug);
+      setFollowStatus('abandoned');
+      setActionMessage('Journey paused. Your progress is saved — resume anytime.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleResume() {
+    setIsSubmitting(true);
+    try {
+      await journeysApi.resume(slug);
+      setFollowStatus('active');
+      setActionMessage('Welcome back — this journey is active again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -109,16 +131,32 @@ export function JourneyDetailPage() {
 
       <div className="sticky bottom-4 mt-10 flex flex-col gap-3 rounded-2xl border border-border bg-white p-5 shadow-lg sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="font-medium text-charcoal">{isFollowing ? "You're following this journey" : 'Ready to follow this path?'}</p>
+          <p className="font-medium text-charcoal">
+            {followStatus === 'active' && "You're following this journey"}
+            {followStatus === 'abandoned' && 'This journey is paused'}
+            {followStatus === 'completed' && "You've completed this journey"}
+            {!followStatus && 'Ready to follow this path?'}
+          </p>
           {actionMessage && <p className="text-sm text-accent-dark">{actionMessage}</p>}
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" onClick={handleSave}>
             {isSaved ? 'Saved' : 'Save Journey'}
           </Button>
-          {isFollowing ? (
-            <Button to="/learning-path">View My Path</Button>
-          ) : (
+          {followStatus === 'active' && (
+            <>
+              <Button variant="secondary" onClick={handlePause} disabled={isSubmitting}>
+                Pause
+              </Button>
+              <Button to="/learning-path">View My Paths</Button>
+            </>
+          )}
+          {followStatus === 'abandoned' && (
+            <Button onClick={handleResume} disabled={isSubmitting}>
+              {isSubmitting ? 'Resuming...' : 'Resume Journey'}
+            </Button>
+          )}
+          {(followStatus === 'completed' || !followStatus) && (
             <Button onClick={handleFollow} disabled={isSubmitting}>
               {isSubmitting ? 'Following...' : 'Follow This Journey'}
             </Button>

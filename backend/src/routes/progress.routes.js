@@ -12,7 +12,7 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
     { rows: courseStats },
     { rows: projectStats },
     { rows: skillStats },
-    { rows: activeJourney },
+    { rows: activeJourneys },
     { rows: hoursRows },
     { rows: recentActivity },
   ] = await Promise.all([
@@ -37,7 +37,7 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
                WHERE jc.journey_id = j.id) AS completed_courses
        FROM user_journeys uj JOIN learning_journeys j ON j.id = uj.journey_id
        WHERE uj.user_id = $1 AND uj.status = 'active'
-       ORDER BY uj.started_at DESC LIMIT 1`,
+       ORDER BY uj.started_at DESC`,
       [userId]
     ),
     query(
@@ -54,20 +54,27 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
        SELECT 'project' AS kind, p.title AS label, up.completed_at AS occurred_at
        FROM user_projects up JOIN projects p ON p.id = up.project_id
        WHERE up.user_id = $1 AND up.status = 'completed'
+       UNION ALL
+       SELECT 'assessment' AS kind, a.title AS label, ar.taken_at AS occurred_at
+       FROM assessment_results ar JOIN assessments a ON a.id = ar.assessment_id
+       WHERE ar.user_id = $1
        ORDER BY occurred_at DESC NULLS LAST LIMIT 8`,
       [userId]
     ),
   ]);
 
-  let nextMilestone = null;
-  if (activeJourney.length > 0) {
-    const j = activeJourney[0];
-    if (j.completed_courses < j.total_courses) {
-      nextMilestone = `Complete ${j.total_courses - j.completed_courses} more course(s) in "${j.title}"`;
-    } else {
-      nextMilestone = `Finish the remaining projects in "${j.title}"`;
-    }
-  }
+  const activePaths = activeJourneys.map((j) => ({
+    id: j.id,
+    title: j.title,
+    slug: j.slug,
+    overallProgress: j.total_courses > 0 ? Math.round((j.completed_courses / j.total_courses) * 100) : 0,
+    nextMilestone: j.completed_courses < j.total_courses
+      ? `Complete ${j.total_courses - j.completed_courses} more course(s) in "${j.title}"`
+      : `Finish the remaining projects in "${j.title}"`,
+  }));
+  const overallLearningProgress = activePaths.length > 0
+    ? Math.round(activePaths.reduce((sum, p) => sum + p.overallProgress, 0) / activePaths.length)
+    : 0;
 
   const learningHours = Math.round((hoursRows[0].minutes / 60) * 10) / 10;
 
@@ -103,8 +110,8 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
     skillsGained: skillStats[0].total,
     learningHours,
     learningStreakDays: streak,
-    currentJourney: activeJourney[0] || null,
-    nextMilestone,
+    activePaths,
+    overallLearningProgress,
     recentActivity,
   });
 }));

@@ -7,7 +7,7 @@ import { Button } from '../components/Button.jsx';
 export function SignupPage() {
   const { signup } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' });
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -16,6 +16,10 @@ export function SignupPage() {
     setError('');
     if (form.password.length < 8) {
       setError('Password must be at least 8 characters long.');
+      return;
+    }
+    if (form.password !== form.confirmPassword) {
+      setError('Passwords do not match.');
       return;
     }
     setIsSubmitting(true);
@@ -62,6 +66,16 @@ export function SignupPage() {
           minLength={8}
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}
+        />
+        <TextField
+          id="confirmPassword"
+          label="Confirm password"
+          type="password"
+          autoComplete="new-password"
+          required
+          minLength={8}
+          value={form.confirmPassword}
+          onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
         />
         {error && (
           <p role="alert" className="text-sm text-danger">

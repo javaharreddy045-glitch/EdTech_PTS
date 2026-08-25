@@ -6,6 +6,7 @@ import { requireFields, assertValidEmail, assertValidPassword } from '../utils/v
 import { badRequest, unauthorized } from '../utils/errors.js';
 import { signToken } from '../utils/jwt.js';
 import { generateResetToken, hashResetToken } from '../utils/resetToken.js';
+import { sendPasswordResetEmail } from '../utils/mailer.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
@@ -91,11 +92,14 @@ router.post('/forgot-password', asyncHandler(async (req, res) => {
     [userId, tokenHash, expiresAt]
   );
 
-  // No email service is configured for this project. The token is logged server-side so it can
-  // be used in local development/testing, and echoed back only outside production.
+  const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${rawToken}`;
+  const { sent } = await sendPasswordResetEmail(normalizedEmail, resetUrl);
+
+  // Always log server-side too, and fall back to echoing the token outside production if the
+  // email couldn't be sent (e.g. RESEND_API_KEY not configured yet in local development).
   console.log(`[password reset] token for ${normalizedEmail}: ${rawToken} (expires ${expiresAt.toISOString()})`);
 
-  if (process.env.NODE_ENV !== 'production') {
+  if (!sent && process.env.NODE_ENV !== 'production') {
     genericResponse.devResetToken = rawToken;
   }
   res.json(genericResponse);

@@ -58,6 +58,8 @@ export const journeysApi = {
   similar: () => api.get('/journeys/similar'),
   getBySlug: (slug) => api.get(`/journeys/${slug}`),
   follow: (slug) => api.post(`/journeys/${slug}/follow`),
+  unfollow: (slug) => api.post(`/journeys/${slug}/unfollow`),
+  resume: (slug) => api.post(`/journeys/${slug}/resume`),
   toggleSave: (slug) => api.post(`/journeys/${slug}/save`),
   saved: () => api.get('/journeys/me/saved'),
 };

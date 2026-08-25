@@ -6,20 +6,7 @@ import { notFound } from '../utils/errors.js';
 
 const router = Router();
 
-router.get('/me', requireAuth, asyncHandler(async (req, res) => {
-  const { rows: journeyRows } = await query(
-    `SELECT j.id, j.title, j.slug, j.outcome, uj.started_at
-     FROM user_journeys uj JOIN learning_journeys j ON j.id = uj.journey_id
-     WHERE uj.user_id = $1 AND uj.status = 'active'
-     ORDER BY uj.started_at DESC LIMIT 1`,
-    [req.user.id]
-  );
-
-  if (journeyRows.length === 0) {
-    return res.json({ journey: null, steps: [] });
-  }
-  const journey = journeyRows[0];
-
+async function buildJourneyPath(userId, journey) {
   const { rows: courseSteps } = await query(
     `SELECT jc.order_index, 'course' AS type, c.id, c.title, c.slug, c.duration_hours,
             COALESCE(e.status, 'not_started') AS status, COALESCE(e.progress_percent, 0) AS progress_percent
@@ -27,7 +14,7 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
      JOIN courses c ON c.id = jc.course_id
      LEFT JOIN enrollments e ON e.course_id = c.id AND e.user_id = $1
      WHERE jc.journey_id = $2`,
-    [req.user.id, journey.id]
+    [userId, journey.id]
   );
   const { rows: projectSteps } = await query(
     `SELECT jp.order_index, 'project' AS type, p.id, p.title, p.slug, p.estimated_hours AS duration_hours,
@@ -36,7 +23,7 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
      JOIN projects p ON p.id = jp.project_id
      LEFT JOIN user_projects up ON up.project_id = p.id AND up.user_id = $1
      WHERE jp.journey_id = $2`,
-    [req.user.id, journey.id]
+    [userId, journey.id]
   );
 
   // Projects are placed after all courses in the sequence (matches the seeded journey structure).
@@ -47,7 +34,23 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
   const overallProgress = total > 0 ? Math.round((completed / total) * 100) : 0;
   const nextStep = steps.find((s) => s.status !== 'completed') || null;
 
-  res.json({ journey, steps, overallProgress, nextStep });
+  return { journey, steps, overallProgress, nextStep };
+}
+
+// A learner can follow multiple journeys at once - following a new one never removes
+// or deactivates an existing one, so this returns every journey currently being followed.
+router.get('/me', requireAuth, asyncHandler(async (req, res) => {
+  const { rows: journeyRows } = await query(
+    `SELECT j.id, j.title, j.slug, j.outcome, uj.started_at
+     FROM user_journeys uj JOIN learning_journeys j ON j.id = uj.journey_id
+     WHERE uj.user_id = $1 AND uj.status = 'active'
+     ORDER BY uj.started_at DESC`,
+    [req.user.id]
+  );
+
+  const paths = await Promise.all(journeyRows.map((journey) => buildJourneyPath(req.user.id, journey)));
+
+  res.json({ paths });
 }));
 
 router.post('/skip/:courseId', requireAuth, asyncHandler(async (req, res) => {

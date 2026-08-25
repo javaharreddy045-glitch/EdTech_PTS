@@ -179,14 +179,14 @@ router.get('/:slug', optionalAuth, asyncHandler(async (req, res) => {
     ),
   ]);
 
-  let isFollowing = false;
+  let followStatus = null;
   let isSaved = false;
   if (req.user) {
     const { rows: followRows } = await query(
       'SELECT status FROM user_journeys WHERE user_id = $1 AND journey_id = $2',
       [req.user.id, journey.id]
     );
-    isFollowing = followRows.length > 0;
+    followStatus = followRows[0]?.status || null;
     const { rows: savedRows } = await query(
       'SELECT id FROM saved_journeys WHERE user_id = $1 AND journey_id = $2',
       [req.user.id, journey.id]
@@ -202,7 +202,8 @@ router.get('/:slug', optionalAuth, asyncHandler(async (req, res) => {
       steps,
       courses: journeyCourses,
       projects: journeyProjects,
-      isFollowing,
+      followStatus,
+      isFollowing: followStatus === 'active',
       isSaved,
     },
   });
@@ -238,6 +239,31 @@ router.post('/:slug/follow', requireAuth, asyncHandler(async (req, res) => {
   );
 
   res.status(201).json({ message: 'Journey followed.', journeyId: journey.id });
+}));
+
+// Pausing/unfollowing a journey never deletes its progress - it only marks it inactive so it
+// stops appearing in "My Learning Paths". Following it again (or resuming) picks up right where it left off.
+router.post('/:slug/unfollow', requireAuth, asyncHandler(async (req, res) => {
+  const { rows: journeyRows } = await query('SELECT id FROM learning_journeys WHERE slug = $1', [req.params.slug]);
+  if (journeyRows.length === 0) throw notFound('Journey not found.');
+
+  await query(
+    `UPDATE user_journeys SET status = 'abandoned' WHERE user_id = $1 AND journey_id = $2 AND status = 'active'`,
+    [req.user.id, journeyRows[0].id]
+  );
+  res.json({ message: 'Journey paused.' });
+}));
+
+router.post('/:slug/resume', requireAuth, asyncHandler(async (req, res) => {
+  const { rows: journeyRows } = await query('SELECT id FROM learning_journeys WHERE slug = $1', [req.params.slug]);
+  if (journeyRows.length === 0) throw notFound('Journey not found.');
+
+  const { rows } = await query(
+    `UPDATE user_journeys SET status = 'active' WHERE user_id = $1 AND journey_id = $2 AND status = 'abandoned' RETURNING id`,
+    [req.user.id, journeyRows[0].id]
+  );
+  if (rows.length === 0) throw notFound('No paused journey found to resume.');
+  res.json({ message: 'Journey resumed.' });
 }));
 
 router.post('/:slug/save', requireAuth, asyncHandler(async (req, res) => {

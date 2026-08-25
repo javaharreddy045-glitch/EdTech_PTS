@@ -164,6 +164,9 @@ progress) so the dashboard, learning path, and progress pages have real data to 
 | `CLIENT_ORIGIN`                | Comma-separated allowed CORS origin(s). Not needed for the combined single-service deploy (same-origin) |
 | `RESET_TOKEN_EXPIRES_MINUTES`  | Password reset token lifetime in minutes                  |
 | `PORT`                         | API port (default `5000`)                                 |
+| `FRONTEND_URL`                 | Used to build the link inside the password reset email (e.g. `https://your-frontend.onrender.com`) |
+| `RESEND_API_KEY`               | API key from [resend.com](https://resend.com) used to send password reset emails. If unset, the reset token is logged server-side and returned in the API response instead (dev-only fallback) |
+| `MAIL_FROM`                    | The "from" address for reset emails (e.g. `PathToSkill <onboarding@resend.dev>` — Resend's shared sandbox domain works without verifying your own domain) |
 
 **frontend/.env**
 
@@ -186,8 +189,9 @@ progress) so the dashboard, learning path, and progress pages have real data to 
 
 This project was manually tested end-to-end against a running PostgreSQL instance, covering:
 
-- **Auth**: signup, login, invalid login, logout, forgot password (dev-mode token), reset password
-  (invalid token rejected, valid token accepted, tokens are single-use)
+- **Auth**: signup (with confirm-password matching), login, invalid login, logout, forgot password
+  (emailed via Resend, with a dev-mode token fallback when no API key is configured), reset password
+  (invalid token rejected, valid token accepted, tokens are single-use, matching confirm-password required)
 - **Onboarding**: goal → level → skills → preference, persisted to `users`/`user_skills`
 - **Search**: global search matching, partial matching, no-results state, clear
 - **Filters**: individual and combined filters on Courses and Journeys, reset behavior
@@ -203,40 +207,48 @@ endpoint above) were run before considering the app complete.
 
 ## Deployment
 
-The repo includes a `render.yaml` (Render "Blueprint") that deploys the whole app as **2 Render services**
-(fits the free plan's service limit even if you already have other projects on the account):
-
-- A managed PostgreSQL instance
-- A single combined Node web service that builds the React app, serves it as static files, and exposes
-  the API under `/api` from the same Express process (`backend/src/app.js` serves `backend/public`, which
-  the build command populates from `frontend/dist`) — no CORS or separate static site needed
+The repo includes a `render.yaml` (Render "Blueprint") that provisions **3 services**: a managed PostgreSQL
+instance, a Node Web Service for the API (`backend/`), and a Static Site for the frontend (`frontend/`) with
+a rewrite rule so client-side routes work on refresh.
 
 ### Deploy via Blueprint
 
 1. Render dashboard → **New +** → **Blueprint** → select this repo. Render reads `render.yaml` and creates
-   both the database and the web service automatically.
-2. Once deployed, open the web service's **Shell** tab and run `npm run db:seed --prefix backend` once to
-   populate demo data.
-3. Visit the service URL — the frontend and API are both served from it.
+   the database, API service, and static site.
+2. Fill in the `sync: false` variables it prompts for: the API's `CLIENT_ORIGIN`/`FRONTEND_URL` (the static
+   site's URL — you may need to deploy once, copy the URL, then set these and redeploy) and, optionally,
+   `RESEND_API_KEY` for real password-reset emails (see below). Set the static site's `VITE_API_BASE_URL`
+   to the API service's URL + `/api`.
+3. Seed the database once: open the API service's **Shell** tab and run `npm run db:seed`. (Free-plan
+   services don't get Shell access — if that's the case, run `npm run db:seed` from your own machine instead,
+   with `DATABASE_URL` temporarily set to the database's **External** connection string.)
 
-### Deploy manually instead (same 2-service, combined approach)
+### Deploy manually instead
 
-1. Create a Render PostgreSQL database and copy its **Internal Database URL**.
-2. Create a Render **Web Service** pointed at the repo root (no Root Directory override):
-   - Build command: `npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend && cp -r frontend/dist backend/public`
-   - Start command: `npm run db:migrate --prefix backend && npm start --prefix backend`
-   - Environment variables: `DATABASE_URL` (from step 1), `JWT_SECRET`, `JWT_EXPIRES_IN=7d`,
-     `NODE_ENV=production`, `RESET_TOKEN_EXPIRES_MINUTES=30`, `VITE_API_BASE_URL=/api`
-3. Once live, open the **Shell** tab and run `npm run db:seed --prefix backend` once.
+1. Create a Render PostgreSQL database, copy its **Internal Database URL**.
+2. Create a Render **Web Service** from `backend/`: build command `npm install`, start command
+   `npm run db:migrate && npm start`. Env vars: `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN=7d`,
+   `NODE_ENV=production`, `RESET_TOKEN_EXPIRES_MINUTES=30`.
+3. Create a Render **Static Site** from `frontend/`: build command `npm install && npm run build`, publish
+   directory `dist`, with a rewrite rule `/* → /index.html`. Env var: `VITE_API_BASE_URL` set to the backend
+   service's URL + `/api`.
+4. Back on the backend service, set `CLIENT_ORIGIN` and `FRONTEND_URL` to the static site's URL (CORS won't
+   work, and reset emails will link to the wrong place, until this is set).
+5. Seed the database as described above.
 
-### Alternative: separate frontend/backend services
+### Sending real password reset emails (optional)
 
-If you have room for a 3rd Render service, you can instead deploy the frontend as its own Static Site
-(Root Directory `frontend`, build command `npm install && npm run build`, publish directory `dist`, with a
-`/* → /index.html` rewrite rule) and the backend as its own Web Service (Root Directory `backend`, build
-command `npm install`, start command `npm run db:migrate && npm start`). In that setup, set the backend's
-`CLIENT_ORIGIN` to the static site's URL, and the frontend's `VITE_API_BASE_URL` to the backend's `/api` URL
-(both as full absolute URLs, since they're on different origins).
+Without any email service configured, "forgot password" logs the reset token server-side and returns it in
+the API response (visible on the Forgot Password page) — enough to test the flow without any setup. To send
+an actual email instead:
+
+1. Create a free account at [resend.com](https://resend.com) and generate an API key.
+2. Add `RESEND_API_KEY` (the key) and `MAIL_FROM` (e.g. `PathToSkill <onboarding@resend.dev>` — Resend's
+   shared sandbox domain works without verifying your own domain) to the backend's environment variables.
+3. Make sure `FRONTEND_URL` is set to your deployed frontend's URL so the emailed link points to the right
+   place.
+
+Once `RESEND_API_KEY` is set, the reset link is emailed and no longer echoed back in the API response.
 
 ## AI Tools Used
 
