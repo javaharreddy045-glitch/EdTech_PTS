@@ -4,6 +4,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { requireAuth, optionalAuth } from '../middleware/auth.js';
 import { notFound, badRequest } from '../utils/errors.js';
 import { toPositiveInt, requireFields } from '../utils/validators.js';
+import { getLessonAccessMap } from '../utils/lessonAccess.js';
 
 const router = Router();
 
@@ -102,6 +103,13 @@ router.get('/:slug', optionalAuth, asyncHandler(async (req, res) => {
     [course.id]
   );
 
+  const { rows: relatedProjects } = await query(
+    `SELECT p.id, p.title, p.slug, p.difficulty, p.estimated_hours, p.image_url
+     FROM project_related_courses prc JOIN projects p ON p.id = prc.project_id
+     WHERE prc.course_id = $1 ORDER BY p.title`,
+    [course.id]
+  );
+
   let enrollment = null;
   let recommendationReason = null;
   if (req.user) {
@@ -129,7 +137,7 @@ router.get('/:slug', optionalAuth, asyncHandler(async (req, res) => {
     }
   }
 
-  res.json({ course: { ...course, skills }, enrollment, recommendationReason });
+  res.json({ course: { ...course, skills, relatedProjects }, enrollment, recommendationReason });
 }));
 
 router.get('/:slug/curriculum', optionalAuth, asyncHandler(async (req, res) => {
@@ -142,17 +150,14 @@ router.get('/:slug/curriculum', optionalAuth, asyncHandler(async (req, res) => {
     [courseId]
   );
 
-  let progressMap = {};
-  if (req.user) {
-    const { rows: progress } = await query(
-      `SELECT lp.lesson_id, lp.completed FROM lesson_progress lp
-       JOIN lessons l ON l.id = lp.lesson_id WHERE lp.user_id = $1 AND l.course_id = $2`,
-      [req.user.id, courseId]
-    );
-    progressMap = Object.fromEntries(progress.map((p) => [p.lesson_id, p.completed]));
-  }
+  const accessMap = await getLessonAccessMap(req.user?.id, courseId);
 
-  res.json({ lessons: lessons.map((l) => ({ ...l, completed: progressMap[l.id] || false })) });
+  res.json({
+    lessons: lessons.map((l) => {
+      const status = accessMap.get(l.id) || 'locked';
+      return { ...l, status, completed: status === 'completed' };
+    }),
+  });
 }));
 
 router.get('/:slug/related', asyncHandler(async (req, res) => {

@@ -3,6 +3,7 @@ import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import { goals, skills, instructors, courses, projects, journeys, assessments } from './seeds/data.js';
 import { buildLessonsForCourse } from './seeds/lessonTemplates.js';
+import { buildMilestonesForProject } from './seeds/projectMilestoneTemplates.js';
 
 const { Pool } = pg;
 // Render's external database URLs require SSL; local/internal connections don't.
@@ -23,6 +24,7 @@ async function main() {
         notifications, assessment_results, assessment_questions, assessments,
         saved_journeys, user_journeys, journey_projects, journey_courses,
         journey_steps, journey_skills_gained, journey_starting_skills, learning_journeys,
+        user_project_tasks, project_tasks, project_milestones,
         user_projects, project_related_courses, project_skills, projects,
         reviews, lesson_progress, enrollments, lessons, course_skills, courses,
         instructors, password_reset_tokens, user_skills, users, skills, goals
@@ -99,8 +101,8 @@ async function main() {
       const lessons = buildLessonsForCourse(c);
       for (const lesson of lessons) {
         await client.query(
-          `INSERT INTO lessons (course_id, title, content, order_index, duration_minutes, resources, quiz)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          `INSERT INTO lessons (course_id, title, content, order_index, duration_minutes, resources, quiz, video_url, video_provider, video_duration_minutes)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
           [
             courseId,
             lesson.title,
@@ -109,6 +111,9 @@ async function main() {
             lesson.duration_minutes,
             JSON.stringify(lesson.resources || []),
             lesson.quiz ? JSON.stringify(lesson.quiz) : null,
+            lesson.video_url || null,
+            lesson.video_provider || null,
+            lesson.video_duration_minutes || null,
           ]
         );
       }
@@ -116,6 +121,7 @@ async function main() {
 
     console.log('Seeding projects...');
     const projectMap = new Map();
+    const projectTaskIdsMap = new Map();
     for (const p of projects) {
       const { rows } = await client.query(
         `INSERT INTO projects (title, slug, description, difficulty, estimated_hours, image_url)
@@ -150,6 +156,26 @@ async function main() {
           );
         }
       }
+
+      const milestones = buildMilestonesForProject(p);
+      const milestoneTaskIds = [];
+      for (const milestone of milestones) {
+        const { rows: milestoneRows } = await client.query(
+          'INSERT INTO project_milestones (project_id, order_index, title, goal) VALUES ($1,$2,$3,$4) RETURNING id',
+          [projectId, milestone.order_index, milestone.title, milestone.goal]
+        );
+        const milestoneId = milestoneRows[0].id;
+        const taskIds = [];
+        for (const task of milestone.tasks) {
+          const { rows: taskRows } = await client.query(
+            'INSERT INTO project_tasks (milestone_id, order_index, title, task_type) VALUES ($1,$2,$3,$4) RETURNING id',
+            [milestoneId, task.order_index, task.title, task.type]
+          );
+          taskIds.push(taskRows[0].id);
+        }
+        milestoneTaskIds.push(...taskIds);
+      }
+      projectTaskIdsMap.set(p.slug, milestoneTaskIds);
     }
 
     console.log('Seeding learning journeys...');
@@ -315,10 +341,16 @@ async function main() {
         const startedAt = daysAgo(60 - idx * 15);
         const completedAt = daysAgo(50 - idx * 15);
         await client.query(
-          `INSERT INTO user_projects (user_id, project_id, status, progress_percent, started_at, completed_at)
-           VALUES ($1,$2,'completed',100,$3,$4)`,
-          [userId, projectId, startedAt, completedAt]
+          `INSERT INTO user_projects (user_id, project_id, status, progress_percent, started_at, completed_at, github_url, deployment_url)
+           VALUES ($1,$2,'completed',100,$3,$4,$5,$6)`,
+          [userId, projectId, startedAt, completedAt, `https://github.com/example/${slug}`, `https://${slug}.example.dev`]
         );
+        for (const taskId of projectTaskIdsMap.get(slug) || []) {
+          await client.query(
+            'INSERT INTO user_project_tasks (user_id, task_id, completed, completed_at) VALUES ($1,$2,true,$3)',
+            [userId, taskId, completedAt]
+          );
+        }
       }
     }
 
@@ -388,15 +420,29 @@ async function main() {
     }
 
     await client.query(
-      `INSERT INTO user_projects (user_id, project_id, status, progress_percent, started_at, completed_at)
-       VALUES ($1,$2,'completed',100,$3,$4)`,
-      [demoUserId, projectMap.get('personal-portfolio'), daysAgo(13), daysAgo(11)]
+      `INSERT INTO user_projects (user_id, project_id, status, progress_percent, started_at, completed_at, github_url, deployment_url)
+       VALUES ($1,$2,'completed',100,$3,$4,$5,$6)`,
+      [demoUserId, projectMap.get('personal-portfolio'), daysAgo(13), daysAgo(11), 'https://github.com/demo-learner/personal-portfolio', 'https://demo-learner-portfolio.example.dev']
     );
+    for (const taskId of projectTaskIdsMap.get('personal-portfolio') || []) {
+      await client.query(
+        'INSERT INTO user_project_tasks (user_id, task_id, completed, completed_at) VALUES ($1,$2,true,$3)',
+        [demoUserId, taskId, daysAgo(11)]
+      );
+    }
+
+    const taskMgmtTaskIds = projectTaskIdsMap.get('task-management-application') || [];
     await client.query(
       `INSERT INTO user_projects (user_id, project_id, status, progress_percent, started_at)
-       VALUES ($1,$2,'not_started',0,NULL)`,
-      [demoUserId, projectMap.get('task-management-application')]
+       VALUES ($1,$2,'in_progress',$3,$4)`,
+      [demoUserId, projectMap.get('task-management-application'), taskMgmtTaskIds.length ? Math.round((2 / taskMgmtTaskIds.length) * 100) : 0, daysAgo(5)]
     );
+    for (const taskId of taskMgmtTaskIds.slice(0, 2)) {
+      await client.query(
+        'INSERT INTO user_project_tasks (user_id, task_id, completed, completed_at) VALUES ($1,$2,true,$3)',
+        [demoUserId, taskId, daysAgo(4)]
+      );
+    }
 
     const jsAssessmentId = assessmentMap.get('javascript-basics-check');
     await client.query(
@@ -474,12 +520,13 @@ async function main() {
       );
     }
 
-    console.log('Recomputing course rating and learner aggregates...');
+    console.log('Recomputing course rating, learner, and project-count aggregates...');
     await client.query(`
       UPDATE courses c SET
         learner_count = COALESCE((SELECT COUNT(*) FROM enrollments e WHERE e.course_id = c.id), 0),
         rating_count = COALESCE((SELECT COUNT(*) FROM reviews r WHERE r.course_id = c.id), 0),
-        rating_avg = COALESCE((SELECT ROUND(AVG(r.rating)::numeric, 2) FROM reviews r WHERE r.course_id = c.id), 0);
+        rating_avg = COALESCE((SELECT ROUND(AVG(r.rating)::numeric, 2) FROM reviews r WHERE r.course_id = c.id), 0),
+        project_count = COALESCE((SELECT COUNT(*) FROM project_related_courses prc WHERE prc.course_id = c.id), 0);
     `);
 
     console.log('Seed complete.');

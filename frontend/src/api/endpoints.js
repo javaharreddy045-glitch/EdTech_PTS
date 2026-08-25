@@ -74,7 +74,8 @@ export const projectsApi = {
   mine: () => api.get('/projects/me'),
   getBySlug: (slug) => api.get(`/projects/${slug}`),
   start: (id) => api.post(`/projects/${id}/start`),
-  complete: (id) => api.post(`/projects/${id}/complete`),
+  toggleTask: (taskId) => api.post(`/projects/tasks/${taskId}/toggle`),
+  complete: (id, payload) => api.post(`/projects/${id}/complete`, payload),
 };
 
 export const assessmentsApi = {

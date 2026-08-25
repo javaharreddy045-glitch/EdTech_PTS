@@ -41,14 +41,23 @@ Progress + Outcome
   Digital Marketing) each with a visual, phase-grouped timeline
 - **Follow a journey** — turns a journey into "My Learning Path" with ordered, trackable steps
 - **Course discovery** — search, category/skill/difficulty/duration/rating filters, sorting
-- **Course details** — curriculum, instructor, reviews, related courses, and a "why recommended" explanation
-- **Lesson player** — content, resources, an inline knowledge check, completion tracking, next-lesson flow
-- **Projects** — start/complete tracking tied into a learner's active path
+- **Course details** — curriculum, instructor, reviews (with a submission form), related courses, a related
+  project, and a "why recommended" explanation
+- **Sequential lesson progression** — lessons unlock one at a time as the previous one is completed (derived
+  live from `lesson_progress`, never a stored lock flag, so it survives refreshes); direct navigation from
+  the curriculum, not just a "Continue" shortcut; verified freeCodeCamp video resources on key lessons
+- **Multiple concurrent learning paths** — a learner can follow, pause, resume, and track several journeys
+  at once, each with fully independent progress
+- **Project workspace** — projects are broken into milestones and checkpoints (tasks, knowledge checks, code,
+  review, deliverable) with real PostgreSQL-backed progress; a milestone unlocks once the previous one's
+  checkpoints are all complete; finishing accepts an optional GitHub/deployment URL
 - **Skill assessments** — scored quizzes that persist a result and an inferred skill level
-- **Progress dashboard** — courses/projects completed, skills gained, learning hours, streak, next milestone
+- **Progress dashboard** — a calm, minimal layout: one dominant "My Learning Paths" section, a compact stat
+  row, and capped recommendations tied back to the path that generated them
 - **Notifications** — course/project completion, milestones, assessment results, journey recommendations
 - **Global search** — categorized results across courses, journeys, projects, skills, and instructors
-- **Authentication** — signup/login/logout, bcrypt hashing, JWT sessions, secure forgot/reset password flow
+- **Authentication** — signup/login/logout, bcrypt hashing, JWT sessions, and a secure forgot/reset password
+  flow with a real emailed reset link (via Resend) when configured
 
 ## Tech Stack
 
@@ -78,11 +87,14 @@ backend/                 Express API
     middleware/           requireAuth / optionalAuth (JWT), centralized error handler
     utils/                jwt, bcrypt-backed validators, reset-token hashing, asyncHandler
   db/
-    migrations/001_init.sql   full schema (tables, FKs, indexes, constraints)
+    migrations/001_init.sql   core schema (tables, FKs, indexes, constraints)
+    migrations/002_*.sql       lesson video fields + project milestones/tasks
     migrate.js                 tracked, idempotent migration runner
     seed.js                    seed orchestration (truncates + reseeds)
     seeds/data.js               all seed content (goals, skills, courses, journeys, assessments)
-    seeds/lessonTemplates.js    generates a 5-lesson curriculum per course
+    seeds/lessonTemplates.js    generates a 5-lesson curriculum per course, with real video
+                                 resources on key lessons
+    seeds/projectMilestoneTemplates.js  generates a milestone/checkpoint breakdown per project
   public/                 (deploy-time only) receives the built frontend for the combined-service deploy;
                            git-ignored, not present in local dev where Vite serves the frontend separately
 ```
@@ -93,14 +105,19 @@ enrollments, notifications, reviews, assessment results) is read from and writte
 
 ## Database Structure
 
-Core tables (see `backend/db/migrations/001_init.sql` for full DDL):
+Core tables (see `backend/db/migrations/001_init.sql` and `002_*.sql` for full DDL):
 
 - **Identity & goals**: `users`, `goals`, `skills`, `user_skills`, `password_reset_tokens`
-- **Courses**: `instructors`, `courses`, `course_skills`, `lessons`, `enrollments`, `lesson_progress`, `reviews`
-- **Projects**: `projects`, `project_skills`, `project_related_courses`, `user_projects`
+- **Courses**: `instructors`, `courses`, `course_skills`, `lessons` (with `video_url`/`video_provider`/
+  `video_duration_minutes`), `enrollments`, `lesson_progress`, `reviews`
+- **Projects**: `projects`, `project_skills`, `project_related_courses`, `user_projects` (including
+  `github_url`/`deployment_url`/`submission_notes` for the final submission), `project_milestones`,
+  `project_tasks`, `user_project_tasks` — a project's milestone/checkpoint progress is always derived from
+  `user_project_tasks` at read time rather than stored redundantly, so it can't drift or desync
 - **Learning journeys** (the core differentiator): `learning_journeys`, `journey_starting_skills`,
   `journey_skills_gained`, `journey_steps` (the visual timeline), `journey_courses`, `journey_projects`,
-  `saved_journeys`, `user_journeys` (a learner's active/completed journey)
+  `saved_journeys`, `user_journeys` (many-to-many between users and journeys — a learner can follow, pause,
+  resume, and independently track progress on several journeys at once)
 - **Assessments**: `assessments`, `assessment_questions`, `assessment_results`
 - **Engagement**: `notifications`
 

@@ -18,6 +18,9 @@ export function buildLessonsForCourse(course) {
     content: `A deep dive into the fundamental ideas behind ${primarySkill}. We cover terminology, common patterns, and the mental models you'll rely on throughout the rest of the course.`,
     duration_minutes: 22,
     resources: [{ label: 'Concept cheat sheet', url: '#' }],
+    ...(course.video
+      ? { video_url: course.video.url, video_provider: course.video.provider, video_duration_minutes: course.video.durationMinutes }
+      : {}),
   });
 
   lessons.push({

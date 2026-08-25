@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { SkillPill } from './SkillPill.jsx';
+import { ProgressBar } from './ProgressBar.jsx';
 
 const STATUS_LABEL = {
   completed: { text: 'Completed', className: 'bg-accent-soft text-accent-dark' },
@@ -32,6 +33,9 @@ export function ProjectCard({ project }) {
             <SkillPill key={skill}>{skill}</SkillPill>
           ))}
         </div>
+      )}
+      {project.status === 'in_progress' && (
+        <ProgressBar value={project.progressPercent} label="Progress" />
       )}
     </Link>
   );

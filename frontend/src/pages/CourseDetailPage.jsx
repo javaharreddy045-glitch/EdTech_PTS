@@ -131,24 +131,68 @@ export function CourseDetailPage() {
           <div className="mt-8">
             <h2 className="font-display text-lg text-charcoal">Curriculum</h2>
             <ol className="mt-3 flex flex-col gap-2">
-              {curriculum.map((lesson, i) => (
-                <li key={lesson.id} className="flex items-center justify-between rounded-xl border border-border bg-white px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
-                        lesson.completed ? 'bg-accent text-white' : 'bg-cream-dim text-charcoal-soft'
-                      }`}
-                      aria-hidden="true"
-                    >
-                      {lesson.completed ? '✓' : i + 1}
-                    </span>
-                    <span className="text-sm text-charcoal">{lesson.title}</span>
-                  </div>
-                  <span className="text-xs text-charcoal-soft">{lesson.duration_minutes} min</span>
-                </li>
-              ))}
+              {curriculum.map((lesson, i) => {
+                const isLocked = !enrollment || lesson.status === 'locked';
+                const rowClasses = `flex items-center justify-between rounded-xl border px-4 py-3 transition-colors ${
+                  isLocked ? 'border-border bg-cream-dim/40' : 'border-border bg-white hover:border-accent'
+                }`;
+                const content = (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium ${
+                          lesson.status === 'completed' ? 'bg-accent text-white' : isLocked ? 'bg-cream-dim text-charcoal-soft' : 'bg-accent-soft text-accent-dark'
+                        }`}
+                        aria-hidden="true"
+                      >
+                        {lesson.status === 'completed' ? '✓' : isLocked ? '🔒' : i + 1}
+                      </span>
+                      <div>
+                        <span className={`text-sm ${isLocked ? 'text-charcoal-soft' : 'text-charcoal'}`}>{lesson.title}</span>
+                        {isLocked && enrollment && (
+                          <p className="text-xs text-charcoal-soft">Complete the previous lesson to unlock this.</p>
+                        )}
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-xs text-charcoal-soft">{lesson.duration_minutes} min</span>
+                  </>
+                );
+                return (
+                  <li key={lesson.id}>
+                    {isLocked ? (
+                      <div className={rowClasses} aria-disabled="true">
+                        {content}
+                      </div>
+                    ) : (
+                      <Link to={`/lessons/${lesson.id}`} className={rowClasses}>
+                        {content}
+                      </Link>
+                    )}
+                  </li>
+                );
+              })}
             </ol>
           </div>
+
+          {course.relatedProjects?.length > 0 && (
+            <div className="mt-8">
+              <h2 className="font-display text-lg text-charcoal">Project</h2>
+              <p className="mt-1 text-sm text-charcoal-soft">Apply what you learn in this course to a hands-on project.</p>
+              <ul className="mt-3 flex flex-col gap-2">
+                {course.relatedProjects.map((project) => (
+                  <li key={project.id}>
+                    <Link
+                      to={`/projects/${project.slug}`}
+                      className="flex items-center justify-between rounded-xl border border-border bg-white px-4 py-3 transition-colors hover:border-accent"
+                    >
+                      <span className="text-sm font-medium text-charcoal">{project.title}</span>
+                      <span className="text-xs capitalize text-charcoal-soft">{project.difficulty} · {Number(project.estimated_hours)} hrs</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="mt-8">
             <h2 className="font-display text-lg text-charcoal">Reviews</h2>

@@ -3,6 +3,7 @@ import { query } from '../config/db.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { requireAuth } from '../middleware/auth.js';
 import { notFound, forbidden } from '../utils/errors.js';
+import { getLessonAccessMap } from '../utils/lessonAccess.js';
 
 const router = Router();
 
@@ -21,21 +22,27 @@ router.get('/:id', requireAuth, asyncHandler(async (req, res) => {
   );
   if (enrollRows.length === 0) throw forbidden('Enroll in this course to access its lessons.');
 
+  const accessMap = await getLessonAccessMap(req.user.id, lesson.course_id);
+  const status = accessMap.get(lesson.id) || 'locked';
+  if (status === 'locked') {
+    throw forbidden('Complete the previous lesson to unlock this one.');
+  }
+
   const { rows: allLessons } = await query(
     'SELECT id, title, order_index FROM lessons WHERE course_id = $1 ORDER BY order_index',
     [lesson.course_id]
   );
   const currentIndex = allLessons.findIndex((l) => l.id === lesson.id);
+  const previousLesson = allLessons[currentIndex - 1] || null;
+  // Safe to always expose the next lesson by order: if this lesson isn't completed yet, the
+  // frontend only offers "Mark Complete & Continue" (which unlocks it first); if it's already
+  // completed, the next one is guaranteed unlocked already.
   const nextLesson = allLessons[currentIndex + 1] || null;
-
-  const { rows: progressRows } = await query(
-    'SELECT completed FROM lesson_progress WHERE user_id = $1 AND lesson_id = $2',
-    [req.user.id, lesson.id]
-  );
 
   res.json({
     lesson,
-    completed: progressRows[0]?.completed || false,
+    completed: status === 'completed',
+    previousLesson,
     nextLesson,
     totalLessons: allLessons.length,
     currentPosition: currentIndex + 1,
