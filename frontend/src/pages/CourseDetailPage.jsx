@@ -50,7 +50,10 @@ export function CourseDetailPage() {
     try {
       const { enrollment: newEnrollment } = await enrollmentsApi.enroll(course.id);
       setEnrollment(newEnrollment);
-      if (curriculum[0]) navigate(`/lessons/${curriculum[0].id}`);
+      // Stay on the course page — refresh the curriculum so lesson 1 shows as available
+      // rather than sending the learner straight into it. They choose when to open it.
+      const { lessons: updatedCurriculum } = await coursesApi.curriculum(slug);
+      setCurriculum(updatedCurriculum);
     } finally {
       setIsEnrolling(false);
     }

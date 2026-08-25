@@ -47,16 +47,21 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
       [userId]
     ),
     query(
-      `SELECT 'lesson' AS kind, l.title AS label, lp.completed_at AS occurred_at
+      `SELECT 'lesson' AS kind, l.title AS label, lp.completed_at AS occurred_at,
+              (SELECT j.title FROM journey_courses jc JOIN learning_journeys j ON j.id = jc.journey_id
+                WHERE jc.course_id = l.course_id LIMIT 1) AS context
        FROM lesson_progress lp JOIN lessons l ON l.id = lp.lesson_id
        WHERE lp.user_id = $1 AND lp.completed = true
        UNION ALL
-       SELECT 'project' AS kind, p.title AS label, up.completed_at AS occurred_at
+       SELECT 'project' AS kind, p.title AS label, up.completed_at AS occurred_at,
+              (SELECT j.title FROM journey_projects jp JOIN learning_journeys j ON j.id = jp.journey_id
+                WHERE jp.project_id = p.id LIMIT 1) AS context
        FROM user_projects up JOIN projects p ON p.id = up.project_id
        WHERE up.user_id = $1 AND up.status = 'completed'
        UNION ALL
-       SELECT 'assessment' AS kind, a.title AS label, ar.taken_at AS occurred_at
+       SELECT 'assessment' AS kind, a.title AS label, ar.taken_at AS occurred_at, s.name AS context
        FROM assessment_results ar JOIN assessments a ON a.id = ar.assessment_id
+       LEFT JOIN skills s ON s.id = a.skill_id
        WHERE ar.user_id = $1
        ORDER BY occurred_at DESC NULLS LAST LIMIT 8`,
       [userId]

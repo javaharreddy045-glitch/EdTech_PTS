@@ -45,20 +45,27 @@ async function buildActivePathSummary(userId, uj) {
   const completedSteps = courseRows.filter((c) => c.status === 'completed').length
     + projectRows.filter((p) => p.status === 'completed').length;
   const overallProgress = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+  const completedCourses = courseRows.filter((c) => c.status === 'completed').length;
 
+  // The learner's current course is whichever one isn't finished yet, in order - never the
+  // next locked course. A course they're actively enrolled in but haven't finished always
+  // takes priority over one they haven't started.
   const nextCourse = courseRows.find((c) => c.status !== 'completed');
   const nextProject = !nextCourse ? projectRows.find((p) => p.status !== 'completed') : null;
   const nextStep = nextCourse
-    ? { type: 'course', title: nextCourse.title, slug: nextCourse.slug, difficulty: nextCourse.difficulty, durationHours: nextCourse.duration_hours, progressPercent: nextCourse.progress_percent }
+    ? { type: 'course', title: nextCourse.title, slug: nextCourse.slug, status: nextCourse.status, difficulty: nextCourse.difficulty, durationHours: nextCourse.duration_hours, progressPercent: nextCourse.progress_percent }
     : nextProject
-      ? { type: 'project', title: nextProject.title, slug: nextProject.slug, difficulty: nextProject.difficulty, durationHours: nextProject.estimated_hours }
+      ? { type: 'project', title: nextProject.title, slug: nextProject.slug, status: nextProject.status, difficulty: nextProject.difficulty, durationHours: nextProject.estimated_hours }
       : null;
 
   return {
     id: journeyId,
     title: uj.title,
     slug: uj.slug,
+    description: uj.description,
     outcome: uj.outcome,
+    totalCourses: courseRows.length,
+    completedCourses,
     totalSteps,
     completedSteps,
     overallProgress,
@@ -84,7 +91,7 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
   const skillIds = userSkillRows.map((s) => s.id);
 
   const { rows: activeJourneyRows } = await query(
-    `SELECT uj.journey_id, uj.started_at, j.title, j.slug, j.outcome
+    `SELECT uj.journey_id, uj.started_at, j.title, j.slug, j.outcome, j.description
      FROM user_journeys uj JOIN learning_journeys j ON j.id = uj.journey_id
      WHERE uj.user_id = $1 AND uj.status = 'active'
      ORDER BY uj.started_at DESC`,
@@ -100,30 +107,65 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
 
   // Recommendations prefer each active path's own next step (with a reason tying it back to
   // that path), then top up with generic top-rated items the learner hasn't started yet.
-  const pathCourseRecs = activePaths
+  // Only the slug + which journey it's for is needed here - full card data is fetched below
+  // in one pass so the dashboard can reuse the same CourseCard/ProjectCard as everywhere else.
+  const pathCourseSlugs = activePaths
     .filter((p) => p.nextStep?.type === 'course')
-    .map((p) => ({ title: p.nextStep.title, slug: p.nextStep.slug, difficulty: p.nextStep.difficulty, duration_hours: p.nextStep.durationHours, journeyTitle: p.title }));
-  const pathProjectRecs = activePaths
+    .map((p) => ({ slug: p.nextStep.slug, journeyTitle: p.title }));
+  const pathProjectSlugs = activePaths
     .filter((p) => p.nextStep?.type === 'project')
-    .map((p) => ({ title: p.nextStep.title, slug: p.nextStep.slug, difficulty: p.nextStep.difficulty, estimated_hours: p.nextStep.durationHours, journeyTitle: p.title }));
+    .map((p) => ({ slug: p.nextStep.slug, journeyTitle: p.title }));
 
-  const { rows: fallbackCourses } = await query(
-    `SELECT c.title, c.slug, c.difficulty, c.duration_hours
-     FROM courses c
+  const { rows: fallbackCourseSlugs } = await query(
+    `SELECT slug FROM courses c
      WHERE NOT EXISTS (SELECT 1 FROM enrollments e WHERE e.user_id = $1 AND e.course_id = c.id)
      ORDER BY c.rating_avg DESC, c.learner_count DESC LIMIT 4`,
     [userId]
   );
-  const { rows: fallbackProjects } = await query(
-    `SELECT p.title, p.slug, p.difficulty, p.estimated_hours
-     FROM projects p
+  const { rows: fallbackProjectSlugs } = await query(
+    `SELECT slug FROM projects p
      WHERE NOT EXISTS (SELECT 1 FROM user_projects up WHERE up.user_id = $1 AND up.project_id = p.id)
      ORDER BY p.title LIMIT 4`,
     [userId]
   );
 
-  const recommendedCourses = dedupeBySlug([...pathCourseRecs, ...fallbackCourses]).slice(0, 2);
-  const recommendedProjects = dedupeBySlug([...pathProjectRecs, ...fallbackProjects]).slice(0, 2);
+  const courseSlugPlan = dedupeBySlug([...pathCourseSlugs, ...fallbackCourseSlugs.map((c) => ({ slug: c.slug }))]).slice(0, 2);
+  const projectSlugPlan = dedupeBySlug([...pathProjectSlugs, ...fallbackProjectSlugs.map((p) => ({ slug: p.slug }))]).slice(0, 2);
+  const journeyTitleBySlug = new Map([...pathCourseSlugs, ...pathProjectSlugs].map((s) => [s.slug, s.journeyTitle]));
+
+  let recommendedCourses = [];
+  if (courseSlugPlan.length > 0) {
+    const { rows } = await query(
+      `SELECT c.title, c.slug, c.image_url, c.difficulty, c.duration_hours, c.rating_avg, c.rating_count, c.learner_count, c.project_count,
+              i.name AS instructor_name,
+              COALESCE(ARRAY_AGG(DISTINCT s.name) FILTER (WHERE s.name IS NOT NULL), '{}') AS skills
+       FROM courses c
+       LEFT JOIN instructors i ON i.id = c.instructor_id
+       LEFT JOIN course_skills cs ON cs.course_id = c.id
+       LEFT JOIN skills s ON s.id = cs.skill_id
+       WHERE c.slug = ANY($1)
+       GROUP BY c.id, i.name`,
+      [courseSlugPlan.map((c) => c.slug)]
+    );
+    const bySlug = new Map(rows.map((r) => [r.slug, r]));
+    recommendedCourses = courseSlugPlan.map((c) => ({ ...bySlug.get(c.slug), journeyTitle: journeyTitleBySlug.get(c.slug) }));
+  }
+
+  let recommendedProjects = [];
+  if (projectSlugPlan.length > 0) {
+    const { rows } = await query(
+      `SELECT p.title, p.slug, p.description, p.image_url, p.difficulty, p.estimated_hours,
+              COALESCE(ARRAY_AGG(DISTINCT s.name) FILTER (WHERE s.name IS NOT NULL), '{}') AS skills
+       FROM projects p
+       LEFT JOIN project_skills ps ON ps.project_id = p.id
+       LEFT JOIN skills s ON s.id = ps.skill_id
+       WHERE p.slug = ANY($1)
+       GROUP BY p.id`,
+      [projectSlugPlan.map((p) => p.slug)]
+    );
+    const bySlug = new Map(rows.map((r) => [r.slug, r]));
+    recommendedProjects = projectSlugPlan.map((p) => ({ ...bySlug.get(p.slug), status: 'not_started', progressPercent: 0, journeyTitle: journeyTitleBySlug.get(p.slug) }));
+  }
 
   const { rows: similarJourneys } = await query(
     `SELECT j.id, j.title, j.slug, j.learner_label, j.outcome, j.duration_weeks,
@@ -151,16 +193,21 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
   }
 
   const { rows: recentActivity } = await query(
-    `SELECT 'lesson_completed' AS kind, l.title AS label, lp.completed_at AS occurred_at
+    `SELECT 'lesson_completed' AS kind, l.title AS label, lp.completed_at AS occurred_at,
+            (SELECT j.title FROM journey_courses jc JOIN learning_journeys j ON j.id = jc.journey_id
+              WHERE jc.course_id = l.course_id LIMIT 1) AS context
      FROM lesson_progress lp JOIN lessons l ON l.id = lp.lesson_id
      WHERE lp.user_id = $1 AND lp.completed = true
      UNION ALL
-     SELECT 'project_completed' AS kind, p.title AS label, up.completed_at AS occurred_at
+     SELECT 'project_completed' AS kind, p.title AS label, up.completed_at AS occurred_at,
+            (SELECT j.title FROM journey_projects jp JOIN learning_journeys j ON j.id = jp.journey_id
+              WHERE jp.project_id = p.id LIMIT 1) AS context
      FROM user_projects up JOIN projects p ON p.id = up.project_id
      WHERE up.user_id = $1 AND up.status = 'completed'
      UNION ALL
-     SELECT 'assessment_taken' AS kind, a.title AS label, ar.taken_at AS occurred_at
+     SELECT 'assessment_taken' AS kind, a.title AS label, ar.taken_at AS occurred_at, s.name AS context
      FROM assessment_results ar JOIN assessments a ON a.id = ar.assessment_id
+     LEFT JOIN skills s ON s.id = a.skill_id
      WHERE ar.user_id = $1
      ORDER BY occurred_at DESC NULLS LAST LIMIT 5`,
     [userId]

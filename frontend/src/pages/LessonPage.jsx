@@ -39,11 +39,9 @@ export function LessonPage() {
     setIsCompleting(true);
     try {
       await lessonsApi.complete(id);
-      if (data.nextLesson) {
-        navigate(`/lessons/${data.nextLesson.id}`);
-      } else {
-        setData((d) => ({ ...d, completed: true }));
-      }
+      // Never auto-open the next lesson — return to the curriculum and let the
+      // learner choose what to open next, even though it's now unlocked.
+      navigate(`/courses/${lesson.course_slug}`);
     } finally {
       setIsCompleting(false);
     }
@@ -186,7 +184,7 @@ export function LessonPage() {
         <div className="flex gap-2">
           {!completed && (
             <Button onClick={handleComplete} disabled={isCompleting}>
-              {isCompleting ? 'Saving...' : nextLesson ? 'Mark Complete & Continue' : 'Mark Complete'}
+              {isCompleting ? 'Saving...' : 'Mark Complete & Continue'}
             </Button>
           )}
           {completed && nextLesson && <Button to={`/lessons/${nextLesson.id}`}>Next Lesson →</Button>}

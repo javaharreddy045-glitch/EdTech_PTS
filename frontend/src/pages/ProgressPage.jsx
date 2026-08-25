@@ -5,6 +5,7 @@ import { ProgressBar } from '../components/ProgressBar.jsx';
 import { Skeleton } from '../components/Skeleton.jsx';
 import { Button } from '../components/Button.jsx';
 import { EmptyState } from '../components/EmptyState.jsx';
+import { ActivityRow } from '../components/ActivityRow.jsx';
 
 function StatTile({ label, value }) {
   return (
@@ -101,11 +102,7 @@ export function ProgressPage() {
         ) : (
           <ul className="mt-4 flex flex-col gap-2">
             {data.recentActivity.map((activity, i) => (
-              <li key={i} className="flex items-center justify-between border-b border-border py-2.5 text-sm last:border-0">
-                <span className="text-charcoal-soft">
-                  <span className="capitalize">{activity.kind}</span>: <span className="font-medium text-charcoal">{activity.label}</span>
-                </span>
-              </li>
+              <ActivityRow key={i} activity={activity} />
             ))}
           </ul>
         )}

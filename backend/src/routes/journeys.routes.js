@@ -3,6 +3,7 @@ import { query } from '../config/db.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { requireAuth, optionalAuth } from '../middleware/auth.js';
 import { notFound } from '../utils/errors.js';
+import { getJourneyCourseStatuses } from '../utils/journeyCourseAccess.js';
 
 const router = Router();
 
@@ -168,16 +169,24 @@ router.get('/:slug', optionalAuth, asyncHandler(async (req, res) => {
     ),
     query('SELECT id, order_index, phase, title FROM journey_steps WHERE journey_id = $1 ORDER BY order_index', [journey.id]),
     query(
-      `SELECT jc.order_index, c.id, c.title, c.slug, c.difficulty, c.duration_hours, c.image_url
+      `SELECT jc.order_index, c.id, c.title, c.slug, c.description, c.difficulty, c.duration_hours, c.image_url
        FROM journey_courses jc JOIN courses c ON c.id = jc.course_id WHERE jc.journey_id = $1 ORDER BY jc.order_index`,
       [journey.id]
     ),
     query(
-      `SELECT jp.order_index, p.id, p.title, p.slug, p.difficulty, p.estimated_hours, p.image_url
+      `SELECT jp.order_index, p.id, p.title, p.slug, p.description, p.difficulty, p.estimated_hours, p.image_url
        FROM journey_projects jp JOIN projects p ON p.id = jp.project_id WHERE jp.journey_id = $1 ORDER BY jp.order_index`,
       [journey.id]
     ),
   ]);
+
+  const courseStatuses = await getJourneyCourseStatuses(req.user?.id, journey.id);
+  const statusByCourseId = new Map(courseStatuses.map((c) => [c.id, c]));
+  const journeyCoursesWithStatus = journeyCourses.map((c) => ({
+    ...c,
+    status: statusByCourseId.get(c.id)?.status || 'locked',
+    progressPercent: statusByCourseId.get(c.id)?.progressPercent || 0,
+  }));
 
   let followStatus = null;
   let isSaved = false;
@@ -194,14 +203,21 @@ router.get('/:slug', optionalAuth, asyncHandler(async (req, res) => {
     isSaved = savedRows.length > 0;
   }
 
+  const completedCourseCount = journeyCoursesWithStatus.filter((c) => c.status === 'completed').length;
+  const overallProgress = journeyCoursesWithStatus.length > 0
+    ? Math.round((completedCourseCount / journeyCoursesWithStatus.length) * 100)
+    : 0;
+
   res.json({
     journey: {
       ...journey,
       startingSkills,
       skillsGained,
       steps,
-      courses: journeyCourses,
+      courses: journeyCoursesWithStatus,
       projects: journeyProjects,
+      overallProgress,
+      completedCourseCount,
       followStatus,
       isFollowing: followStatus === 'active',
       isSaved,

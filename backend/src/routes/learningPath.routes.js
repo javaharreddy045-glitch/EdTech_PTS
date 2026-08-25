@@ -33,15 +33,17 @@ async function buildJourneyPath(userId, journey) {
   const completed = steps.filter((s) => s.status === 'completed').length;
   const overallProgress = total > 0 ? Math.round((completed / total) * 100) : 0;
   const nextStep = steps.find((s) => s.status !== 'completed') || null;
+  const totalCourses = courseSteps.length;
+  const completedCourses = courseSteps.filter((s) => s.status === 'completed').length;
 
-  return { journey, steps, overallProgress, nextStep };
+  return { journey, steps, overallProgress, nextStep, totalCourses, completedCourses };
 }
 
 // A learner can follow multiple journeys at once - following a new one never removes
 // or deactivates an existing one, so this returns every journey currently being followed.
 router.get('/me', requireAuth, asyncHandler(async (req, res) => {
   const { rows: journeyRows } = await query(
-    `SELECT j.id, j.title, j.slug, j.outcome, uj.started_at
+    `SELECT j.id, j.title, j.slug, j.outcome, j.description, uj.started_at
      FROM user_journeys uj JOIN learning_journeys j ON j.id = uj.journey_id
      WHERE uj.user_id = $1 AND uj.status = 'active'
      ORDER BY uj.started_at DESC`,
