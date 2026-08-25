@@ -20,6 +20,10 @@ export function CourseDetailPage() {
   const [reviews, setReviews] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isEnrolling, setIsEnrolling] = useState(false);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewMessage, setReviewMessage] = useState('');
 
   useEffect(() => {
     setIsLoading(true);
@@ -49,6 +53,23 @@ export function CourseDetailPage() {
       if (curriculum[0]) navigate(`/lessons/${curriculum[0].id}`);
     } finally {
       setIsEnrolling(false);
+    }
+  }
+
+  async function handleSubmitReview(e) {
+    e.preventDefault();
+    if (reviewRating === 0) return;
+    setIsSubmittingReview(true);
+    setReviewMessage('');
+    try {
+      await coursesApi.addReview(slug, { rating: reviewRating, comment: reviewComment.trim() || undefined });
+      const { reviews: updatedReviews } = await coursesApi.reviews(slug);
+      setReviews(updatedReviews);
+      setReviewMessage('Thanks — your review has been posted.');
+    } catch (err) {
+      setReviewMessage(err.message || 'Could not submit your review.');
+    } finally {
+      setIsSubmittingReview(false);
     }
   }
 
@@ -131,6 +152,48 @@ export function CourseDetailPage() {
 
           <div className="mt-8">
             <h2 className="font-display text-lg text-charcoal">Reviews</h2>
+
+            {enrollment ? (
+              <form onSubmit={handleSubmitReview} className="mt-3 rounded-xl border border-border bg-white p-4">
+                <p className="text-sm font-medium text-charcoal">Write a review</p>
+                <fieldset className="mt-2">
+                  <legend className="sr-only">Your rating</legend>
+                  <div className="flex gap-1" role="radiogroup" aria-label="Rating out of 5">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        role="radio"
+                        aria-checked={reviewRating === star}
+                        aria-label={`${star} star${star > 1 ? 's' : ''}`}
+                        onClick={() => setReviewRating(star)}
+                        className={`text-2xl leading-none transition-colors ${star <= reviewRating ? 'text-warn' : 'text-cream-dim hover:text-warn/50'}`}
+                      >
+                        ★
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+                <label htmlFor="review-comment" className="sr-only">Your review</label>
+                <textarea
+                  id="review-comment"
+                  rows={2}
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  placeholder="Share what you thought of this course (optional)"
+                  className="mt-3 w-full rounded-xl border border-border bg-white px-3.5 py-2.5 text-sm focus:border-accent focus:outline-none"
+                />
+                <div className="mt-3 flex items-center gap-3">
+                  <Button type="submit" size="sm" disabled={reviewRating === 0 || isSubmittingReview}>
+                    {isSubmittingReview ? 'Submitting...' : 'Submit Review'}
+                  </Button>
+                  {reviewMessage && <p className="text-sm text-accent-dark">{reviewMessage}</p>}
+                </div>
+              </form>
+            ) : (
+              <p className="mt-3 text-sm text-charcoal-soft">Enroll in this course to leave a review.</p>
+            )}
+
             {reviews.length === 0 ? (
               <p className="mt-3 text-sm text-charcoal-soft">No reviews yet.</p>
             ) : (
