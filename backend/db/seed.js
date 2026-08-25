@@ -5,7 +5,12 @@ import { goals, skills, instructors, courses, projects, journeys, assessments } 
 import { buildLessonsForCourse } from './seeds/lessonTemplates.js';
 
 const { Pool } = pg;
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// Render's external database URLs require SSL; local/internal connections don't.
+const isLocalDb = /localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL || '');
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: isLocalDb ? false : { rejectUnauthorized: false },
+});
 
 const daysAgo = (n) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
 
