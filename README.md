@@ -1,6 +1,6 @@
 # PathToSkill
 
-**Learn from paths that worked.**
+**Find the path. Build the skill.**
 
 ## Problem Statement
 
@@ -39,6 +39,13 @@ Progress + Outcome
 - **Goal + starting-point onboarding** — goal, current level, existing skills, and learning style preference
 - **Learning Journeys** — 5 seeded, fully worked journeys (Full-Stack, AI/ML, Product Design, Data Analytics,
   Digital Marketing) each with a visual, phase-grouped timeline
+- **Learners Like You** — five named, entirely fictional demo learner profiles (`aarav.demo@pathtoskill.example`
+  and similar reserved `.example` addresses), one per journey, ranked by goal/skill overlap with the viewer.
+  Each profile is intentionally minimal (goal, starting point, skills gained, outcome) with a lightweight,
+  frontend-only "Connect" demo flow — the journey stays the focus, not the person
+- **Sidebar app shell** — signed-in learners get a persistent sidebar (Home, Explore Paths, My Paths emphasized,
+  Courses, Projects, Assessments, Progress) with a compact top bar; mobile switches to a bottom nav
+  (Home / Paths / My Learning / More)
 - **Follow a journey** — turns a journey into "My Learning Path" with ordered, trackable steps
 - **Course discovery** — search, category/skill/difficulty/duration/rating filters, sorting
 - **Course details** — curriculum, instructor, reviews (with a submission form), related courses, a related

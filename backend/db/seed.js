@@ -266,17 +266,21 @@ async function main() {
       'Practical and to the point. Helped me build real confidence in this skill.',
     ];
 
+    const nextLevel = { beginner: 'intermediate', intermediate: 'advanced', advanced: 'advanced' };
+
     for (const j of journeys) {
       const goalId = goalMap.get(j.goal);
       const { rows: userRows } = await client.query(
-        `INSERT INTO users (name, email, password_hash, current_goal_id, current_level, learning_preference, onboarding_completed)
-         VALUES ($1,$2,$3,$4,$5,$6,true) RETURNING id`,
+        `INSERT INTO users (name, email, password_hash, avatar_url, bio, current_goal_id, current_level, learning_preference, onboarding_completed, is_demo_profile)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,true) RETURNING id`,
         [
-          j.learner_label,
-          `${j.slug}@seed.pathtoskill.internal`,
+          j.demoLearner.name,
+          j.demoLearner.email,
           placeholderHash,
+          `https://placehold.co/128x128/E4EDE9/2B2B28?text=${encodeURIComponent(j.demoLearner.name[0])}`,
+          `Followed the ${j.title} to become a ${j.outcome}.`,
           goalId,
-          j.starting_level,
+          nextLevel[j.starting_level],
           'mixed',
         ]
       );

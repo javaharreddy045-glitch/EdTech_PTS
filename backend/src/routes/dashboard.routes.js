@@ -221,6 +221,23 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
     [userId]
   );
 
+  // Suggest an assessment tied to the skill of whichever course the learner is currently on,
+  // so "practice/validate" ties back to the path they're actually following.
+  const currentCourseSlug = activePaths.find((p) => p.nextStep?.type === 'course')?.nextStep?.slug;
+  let suggestedAssessment = null;
+  if (currentCourseSlug) {
+    const { rows } = await query(
+      `SELECT a.id, a.title, a.slug, a.description,
+              (SELECT COUNT(*)::int FROM assessment_questions q WHERE q.assessment_id = a.id) AS question_count
+       FROM assessments a
+       WHERE a.skill_id IN (SELECT cs.skill_id FROM course_skills cs JOIN courses c ON c.id = cs.course_id WHERE c.slug = $1)
+         AND NOT EXISTS (SELECT 1 FROM assessment_results ar WHERE ar.user_id = $2 AND ar.assessment_id = a.id)
+       LIMIT 1`,
+      [currentCourseSlug, userId]
+    );
+    suggestedAssessment = rows[0] || null;
+  }
+
   res.json({
     goal: profile?.goal_title || null,
     currentLevel: profile?.current_level || null,
@@ -228,6 +245,7 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
     overallLearningProgress,
     recommendedCourses,
     recommendedProjects,
+    suggestedAssessment,
     similarJourneys,
     recentActivity,
     stats: overallStats[0],

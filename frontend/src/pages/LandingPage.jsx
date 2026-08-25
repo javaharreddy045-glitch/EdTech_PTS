@@ -16,11 +16,11 @@ export function LandingPage() {
       <section className="mx-auto max-w-5xl px-4 py-20 text-center sm:px-6 sm:py-28">
         <p className="text-xs font-semibold uppercase tracking-widest text-accent-dark">PathToSkill</p>
         <h1 className="mx-auto mt-4 max-w-3xl font-display text-4xl font-medium leading-tight text-charcoal sm:text-5xl">
-          Learn from paths that worked.
+          Find the path. Build the skill.
         </h1>
         <p className="mx-auto mt-5 max-w-xl text-base text-charcoal-soft sm:text-lg">
-          Instead of hundreds of courses, see the exact learning journey a learner with your starting point
-          followed to reach their goal — then follow it yourself.
+          Discover learning journeys followed by learners like you, choose a path that fits your goal, and
+          build your skills through structured courses, projects, and assessments.
         </p>
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button to="/signup" size="lg">

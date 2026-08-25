@@ -102,3 +102,8 @@ export const searchApi = {
 export const dashboardApi = {
   mine: () => api.get('/dashboard/me'),
 };
+
+export const learnersApi = {
+  similar: () => api.get('/learners/similar'),
+  getById: (id) => api.get(`/learners/${id}`),
+};

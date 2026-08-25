@@ -61,23 +61,43 @@ export function JourneysPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
       <header className="animate-fade-up">
-        <h1 className="font-display text-2xl text-charcoal sm:text-3xl">Learning Journeys</h1>
+        <h1 className="font-display text-2xl text-charcoal sm:text-3xl">Find Your Path</h1>
         <p className="mt-1.5 max-w-2xl text-sm text-charcoal-soft">
-          See the exact sequence of courses and projects that learners with a similar starting point followed
-          to reach their goal.
+          Discover learning journeys followed by learners like you.
         </p>
       </header>
+
+      {goals.length > 0 && (
+        <div className="animate-fade-up mt-5 flex flex-wrap gap-2">
+          {goals.map((goal) => {
+            const isActive = filters.goal === goal.slug;
+            return (
+              <button
+                key={goal.id}
+                type="button"
+                onClick={() => setFilters((f) => ({ ...f, goal: isActive ? '' : goal.slug }))}
+                aria-pressed={isActive}
+                className={`rounded-full border px-3.5 py-1.5 text-sm transition-colors duration-150 ${
+                  isActive ? 'border-accent bg-accent text-white' : 'border-border bg-white text-charcoal-soft hover:border-accent/60'
+                }`}
+              >
+                {goal.title}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="mt-6 flex flex-col gap-4">
         <div className="flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1">
-            <label htmlFor="journey-search" className="sr-only">Search journeys</label>
+            <label htmlFor="journey-search" className="sr-only">What do you want to learn?</label>
             <input
               id="journey-search"
               type="search"
               value={filters.search}
               onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-              placeholder="Search journeys by title or outcome..."
+              placeholder="What do you want to learn? (e.g. full-stack development, AI, product design...)"
               className="w-full rounded-full border border-border bg-white px-4 py-2.5 text-sm focus:border-accent focus:outline-none"
             />
           </div>

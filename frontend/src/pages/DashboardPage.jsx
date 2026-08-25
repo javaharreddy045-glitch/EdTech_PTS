@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { dashboardApi } from '../api/endpoints.js';
+import { dashboardApi, learnersApi } from '../api/endpoints.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Button } from '../components/Button.jsx';
+import { ProgressBar } from '../components/ProgressBar.jsx';
 import { MyPathCard } from '../components/MyPathCard.jsx';
-import { JourneyCard } from '../components/JourneyCard.jsx';
+import { LearnerCard } from '../components/LearnerCard.jsx';
 import { CourseCard } from '../components/CourseCard.jsx';
 import { ProjectCard } from '../components/ProjectCard.jsx';
 import { ActivityRow } from '../components/ActivityRow.jsx';
@@ -23,13 +24,16 @@ function StatInline({ value, label }) {
 export function DashboardPage() {
   const { user } = useAuth();
   const [data, setData] = useState(null);
+  const [learners, setLearners] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    dashboardApi
-      .mine()
-      .then(setData)
+    Promise.all([dashboardApi.mine(), learnersApi.similar().catch(() => ({ learners: [] }))])
+      .then(([dashboard, learnersData]) => {
+        setData(dashboard);
+        setLearners(learnersData.learners);
+      })
       .catch((err) => setError(err.message || 'Could not load your dashboard.'))
       .finally(() => setIsLoading(false));
   }, []);
@@ -52,6 +56,7 @@ export function DashboardPage() {
   }
 
   const hasRecommendations = data.recommendedCourses.length > 0 || data.recommendedProjects.length > 0;
+  const currentCourse = data.activePaths.find((p) => p.nextStep?.type === 'course');
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6">
@@ -98,24 +103,35 @@ export function DashboardPage() {
         </Link>
       </section>
 
-      {/* Learners Like You — the core differentiator */}
+      {/* Learners Like You — the core differentiator, made relatable through real (demo) journeys */}
       <section className="mt-14">
         <h2 className="font-display text-xl text-charcoal">Learners Like You</h2>
-        <p className="mt-1.5 text-sm text-charcoal-soft">See learning paths followed by learners who started from a similar point.</p>
+        <p className="mt-1.5 text-sm text-charcoal-soft">People who started where you are and the paths they followed.</p>
 
-        {data.similarJourneys.length === 0 ? (
-          <p className="mt-4 text-sm text-charcoal-soft">Complete onboarding to get personalized journey matches.</p>
+        {learners.length === 0 ? (
+          <p className="mt-4 text-sm text-charcoal-soft">Complete onboarding to get personalized matches.</p>
         ) : (
           <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
-            {data.similarJourneys.map((journey) => (
-              <JourneyCard key={journey.id} journey={{ ...journey, courseCount: journey.course_count, projectCount: journey.project_count }} />
+            {learners.map((learner) => (
+              <LearnerCard key={learner.id} learner={learner} />
             ))}
           </div>
         )}
-        <Link to="/journeys" className="mt-4 inline-block text-sm font-medium text-accent-dark hover:underline">
-          View all journeys →
-        </Link>
       </section>
+
+      {/* Continue Learning — the single most relevant next step, never the next locked course */}
+      {currentCourse?.nextStep && (
+        <section className="mt-14">
+          <h2 className="font-display text-lg text-charcoal">Continue Learning</h2>
+          <div className="mt-4 flex flex-col gap-4 rounded-2xl border border-border bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-medium text-charcoal">{currentCourse.nextStep.title}</p>
+              <ProgressBar value={currentCourse.nextStep.progressPercent || 0} className="mt-2 max-w-xs" />
+            </div>
+            <Button to={`/courses/${currentCourse.nextStep.slug}`} className="shrink-0">Continue</Button>
+          </div>
+        </section>
+      )}
 
       {/* Recommendations — proper cards, capped at 2 each */}
       {hasRecommendations && (
@@ -146,6 +162,20 @@ export function DashboardPage() {
               </div>
             </div>
           )}
+        </section>
+      )}
+
+      {/* Upcoming Assessment — practice/validate what the current course teaches */}
+      {data.suggestedAssessment && (
+        <section className="mt-14">
+          <h2 className="font-display text-lg text-charcoal">Upcoming Assessment</h2>
+          <div className="mt-4 flex flex-col gap-4 rounded-2xl border border-border bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-medium text-charcoal">{data.suggestedAssessment.title}</p>
+              <p className="mt-1 text-sm text-charcoal-soft">{data.suggestedAssessment.question_count} questions</p>
+            </div>
+            <Button to={`/assessments/${data.suggestedAssessment.slug}`} variant="secondary" className="shrink-0">Start Assessment</Button>
+          </div>
         </section>
       )}
 

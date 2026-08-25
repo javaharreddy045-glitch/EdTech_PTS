@@ -20,6 +20,7 @@ import progressRoutes from './routes/progress.routes.js';
 import notificationsRoutes from './routes/notifications.routes.js';
 import searchRoutes from './routes/search.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
+import learnersRoutes from './routes/learners.routes.js';
 
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 
@@ -56,6 +57,7 @@ export function createApp() {
   app.use('/api/notifications', notificationsRoutes);
   app.use('/api/search', searchRoutes);
   app.use('/api/dashboard', dashboardRoutes);
+  app.use('/api/learners', learnersRoutes);
 
   // Unmatched /api/* routes get a JSON 404 rather than falling through to the SPA handler below.
   app.use('/api', notFoundHandler);

@@ -24,6 +24,7 @@ import { ProgressPage } from './pages/ProgressPage.jsx';
 import { ProfilePage } from './pages/ProfilePage.jsx';
 import { NotificationsPage } from './pages/NotificationsPage.jsx';
 import { NotFoundPage } from './pages/NotFoundPage.jsx';
+import { LearnerProfilePage } from './pages/LearnerProfilePage.jsx';
 
 export default function App() {
   return (
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="/progress" element={<ProgressPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/learners/:id" element={<LearnerProfilePage />} />
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />
