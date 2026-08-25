@@ -83,6 +83,8 @@ backend/                 Express API
     seed.js                    seed orchestration (truncates + reseeds)
     seeds/data.js               all seed content (goals, skills, courses, journeys, assessments)
     seeds/lessonTemplates.js    generates a 5-lesson curriculum per course
+  public/                 (deploy-time only) receives the built frontend for the combined-service deploy;
+                           git-ignored, not present in local dev where Vite serves the frontend separately
 ```
 
 The frontend never talks to Postgres directly and never uses `localStorage` for application data — only the
@@ -159,7 +161,7 @@ progress) so the dashboard, learning path, and progress pages have real data to 
 | `DATABASE_URL`                 | PostgreSQL connection string                             |
 | `JWT_SECRET`                   | Secret used to sign session tokens                        |
 | `JWT_EXPIRES_IN`               | Session token lifetime (e.g. `7d`)                        |
-| `CLIENT_ORIGIN`                | Comma-separated allowed CORS origin(s)                    |
+| `CLIENT_ORIGIN`                | Comma-separated allowed CORS origin(s). Not needed for the combined single-service deploy (same-origin) |
 | `RESET_TOKEN_EXPIRES_MINUTES`  | Password reset token lifetime in minutes                  |
 | `PORT`                         | API port (default `5000`)                                 |
 
@@ -167,7 +169,7 @@ progress) so the dashboard, learning path, and progress pages have real data to 
 
 | Variable              | Description                          |
 |------------------------|----------------------------------------|
-| `VITE_API_BASE_URL`    | Base URL of the backend API (`/api`)  |
+| `VITE_API_BASE_URL`    | Base URL of the backend API. Use `/api` for the combined single-service deploy, or a full absolute URL (e.g. `https://your-api.onrender.com/api`) when the frontend and backend are separate services/origins |
 
 ## Database Migration & Seeding
 
@@ -201,22 +203,40 @@ endpoint above) were run before considering the app complete.
 
 ## Deployment
 
-The repo includes a `render.yaml` (Render "Blueprint") that provisions:
+The repo includes a `render.yaml` (Render "Blueprint") that deploys the whole app as **2 Render services**
+(fits the free plan's service limit even if you already have other projects on the account):
 
 - A managed PostgreSQL instance
-- A Node web service for the API (`backend/`), running migrations on deploy
-- A static site for the frontend (`frontend/`), with a catch-all rewrite to `index.html` so client-side
-  routes work correctly on refresh/direct navigation
+- A single combined Node web service that builds the React app, serves it as static files, and exposes
+  the API under `/api` from the same Express process (`backend/src/app.js` serves `backend/public`, which
+  the build command populates from `frontend/dist`) — no CORS or separate static site needed
 
-To deploy manually instead:
+### Deploy via Blueprint
 
-1. Create a Render PostgreSQL database and copy its connection string.
-2. Create a Render Web Service from `backend/`, set `DATABASE_URL`, `JWT_SECRET`, `CLIENT_ORIGIN` (your
-   frontend URL), build command `npm install`, start command `npm run db:migrate && npm start`.
-3. Run `npm run db:seed` once from the Render shell to populate demo data.
-4. Create a Render Static Site from `frontend/`, set `VITE_API_BASE_URL` to your backend's `/api` URL,
-   build command `npm install && npm run build`, publish directory `dist`, and add a rewrite rule
-   (`/* → /index.html`) so deep links work.
+1. Render dashboard → **New +** → **Blueprint** → select this repo. Render reads `render.yaml` and creates
+   both the database and the web service automatically.
+2. Once deployed, open the web service's **Shell** tab and run `npm run db:seed --prefix backend` once to
+   populate demo data.
+3. Visit the service URL — the frontend and API are both served from it.
+
+### Deploy manually instead (same 2-service, combined approach)
+
+1. Create a Render PostgreSQL database and copy its **Internal Database URL**.
+2. Create a Render **Web Service** pointed at the repo root (no Root Directory override):
+   - Build command: `npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend && cp -r frontend/dist backend/public`
+   - Start command: `npm run db:migrate --prefix backend && npm start --prefix backend`
+   - Environment variables: `DATABASE_URL` (from step 1), `JWT_SECRET`, `JWT_EXPIRES_IN=7d`,
+     `NODE_ENV=production`, `RESET_TOKEN_EXPIRES_MINUTES=30`, `VITE_API_BASE_URL=/api`
+3. Once live, open the **Shell** tab and run `npm run db:seed --prefix backend` once.
+
+### Alternative: separate frontend/backend services
+
+If you have room for a 3rd Render service, you can instead deploy the frontend as its own Static Site
+(Root Directory `frontend`, build command `npm install && npm run build`, publish directory `dist`, with a
+`/* → /index.html` rewrite rule) and the backend as its own Web Service (Root Directory `backend`, build
+command `npm install`, start command `npm run db:migrate && npm start`). In that setup, set the backend's
+`CLIENT_ORIGIN` to the static site's URL, and the frontend's `VITE_API_BASE_URL` to the backend's `/api` URL
+(both as full absolute URLs, since they're on different origins).
 
 ## AI Tools Used
 

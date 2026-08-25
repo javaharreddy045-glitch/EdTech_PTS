@@ -1,5 +1,8 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 
 import authRoutes from './routes/auth.routes.js';
 import onboardingRoutes from './routes/onboarding.routes.js';
@@ -19,6 +22,11 @@ import searchRoutes from './routes/search.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// When frontend and backend are deployed as a single Render service, the frontend's
+// production build is copied to backend/public by the build command (see package.json).
+const FRONTEND_BUILD_DIR = path.join(__dirname, '../public');
 
 export function createApp() {
   const app = express();
@@ -49,7 +57,18 @@ export function createApp() {
   app.use('/api/search', searchRoutes);
   app.use('/api/dashboard', dashboardRoutes);
 
-  app.use(notFoundHandler);
+  // Unmatched /api/* routes get a JSON 404 rather than falling through to the SPA handler below.
+  app.use('/api', notFoundHandler);
+
+  // Serve the built frontend when it's present (single combined-service deployment).
+  // In local development the frontend runs on its own Vite server instead, so this is skipped.
+  if (fs.existsSync(path.join(FRONTEND_BUILD_DIR, 'index.html'))) {
+    app.use(express.static(FRONTEND_BUILD_DIR));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(FRONTEND_BUILD_DIR, 'index.html'));
+    });
+  }
+
   app.use(errorHandler);
 
   return app;
