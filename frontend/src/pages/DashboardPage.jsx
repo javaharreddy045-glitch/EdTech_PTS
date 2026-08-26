@@ -4,7 +4,7 @@ import { dashboardApi, learnersApi } from '../api/endpoints.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Button } from '../components/Button.jsx';
 import { ProgressBar } from '../components/ProgressBar.jsx';
-import { MyPathCard } from '../components/MyPathCard.jsx';
+import { LearningPathCard } from '../components/LearningPathCard.jsx';
 import { LearnerCard } from '../components/LearnerCard.jsx';
 import { CourseCard } from '../components/CourseCard.jsx';
 import { ProjectCard } from '../components/ProjectCard.jsx';
@@ -92,9 +92,9 @@ export function DashboardPage() {
             <Button to="/journeys" className="mt-5">Explore Learning Paths</Button>
           </div>
         ) : (
-          <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div className="mt-6 flex flex-col gap-5">
             {data.activePaths.map((path) => (
-              <MyPathCard key={path.id} path={path} />
+              <LearningPathCard key={path.id} journey={path} />
             ))}
           </div>
         )}
