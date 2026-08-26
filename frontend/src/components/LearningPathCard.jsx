@@ -9,28 +9,16 @@ export function LearningPathCard({ journey }) {
     : null;
 
   return (
-    <div className="rounded-2xl border border-border bg-white p-6 transition-all duration-200 ease-out hover:border-accent/40 hover:shadow-lg hover:shadow-charcoal/5 sm:p-8">
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:gap-10">
-        <div className="lg:w-[34%]">
-          <p className="text-xs font-semibold uppercase tracking-wide text-accent-dark">Learning Path</p>
-          <h3 className="mt-1.5 font-display text-xl text-charcoal">{journey.title}</h3>
-          {journey.description && (
-            <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-charcoal-soft">{journey.description}</p>
-          )}
-        </div>
-
-        <div className="flex-1 lg:border-x lg:border-border lg:px-10">
-          <p className="text-xs text-charcoal-soft">{journey.completedCourses} / {journey.totalCourses} courses completed</p>
-          <ProgressBar value={journey.overallProgress} className="mt-2 max-w-sm" />
-          {nextLine && <p className="mt-3 text-sm text-charcoal">{nextLine}</p>}
-        </div>
-
-        <div className="lg:w-auto lg:flex-shrink-0">
-          <Button to={`/journeys/${journey.slug}`} size="lg" className="w-full lg:w-auto">
-            Explore Path →
-          </Button>
-        </div>
+    <div className="flex flex-col gap-4 rounded-2xl border border-border bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-accent-dark">Learning Path</p>
+        <p className="mt-1 font-medium text-charcoal">{journey.title}</p>
+        {journey.description && <p className="mt-1 line-clamp-1 text-sm text-charcoal-soft">{journey.description}</p>}
+        <p className="mt-2 text-sm text-charcoal-soft">{journey.completedCourses} / {journey.totalCourses} courses completed</p>
+        {nextLine && <p className="mt-0.5 text-sm text-charcoal-soft">{nextLine}</p>}
+        <ProgressBar value={journey.overallProgress} className="mt-2 max-w-xs" />
       </div>
+      <Button to={`/journeys/${journey.slug}`} className="shrink-0">Explore Path →</Button>
     </div>
   );
 }
