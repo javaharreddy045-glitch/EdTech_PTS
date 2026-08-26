@@ -52,8 +52,38 @@ async function buildActivePathSummary(userId, uj) {
   // takes priority over one they haven't started.
   const nextCourse = courseRows.find((c) => c.status !== 'completed');
   const nextProject = !nextCourse ? projectRows.find((p) => p.status !== 'completed') : null;
+
+  let lessonDetail = null;
+  if (nextCourse) {
+    const { rows: lessons } = await query(
+      `SELECT l.id, l.title, COALESCE(lp.completed, false) AS completed
+       FROM lessons l LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.user_id = $1
+       WHERE l.course_id = $2 ORDER BY l.order_index`,
+      [userId, nextCourse.id]
+    );
+    const completedLessons = lessons.filter((l) => l.completed).length;
+    const nextLesson = lessons.find((l) => !l.completed) || null;
+    lessonDetail = {
+      totalLessons: lessons.length,
+      completedLessons,
+      nextLessonNumber: Math.min(completedLessons + 1, lessons.length),
+      nextLessonTitle: nextLesson?.title || null,
+    };
+  }
+
   const nextStep = nextCourse
-    ? { type: 'course', title: nextCourse.title, slug: nextCourse.slug, status: nextCourse.status, difficulty: nextCourse.difficulty, durationHours: nextCourse.duration_hours, progressPercent: nextCourse.progress_percent }
+    ? {
+        type: 'course',
+        title: nextCourse.title,
+        slug: nextCourse.slug,
+        status: nextCourse.status,
+        difficulty: nextCourse.difficulty,
+        durationHours: nextCourse.duration_hours,
+        progressPercent: nextCourse.progress_percent,
+        courseNumber: nextCourse.order_index,
+        totalCourses: courseRows.length,
+        ...lessonDetail,
+      }
     : nextProject
       ? { type: 'project', title: nextProject.title, slug: nextProject.slug, status: nextProject.status, difficulty: nextProject.difficulty, durationHours: nextProject.estimated_hours }
       : null;
@@ -83,12 +113,6 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
     [userId]
   );
   const profile = userRows[0];
-
-  const { rows: userSkillRows } = await query(
-    `SELECT s.id FROM user_skills us JOIN skills s ON s.id = us.skill_id WHERE us.user_id = $1`,
-    [userId]
-  );
-  const skillIds = userSkillRows.map((s) => s.id);
 
   const { rows: activeJourneyRows } = await query(
     `SELECT uj.journey_id, uj.started_at, j.title, j.slug, j.outcome, j.description
@@ -167,31 +191,6 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
     recommendedProjects = projectSlugPlan.map((p) => ({ ...bySlug.get(p.slug), status: 'not_started', progressPercent: 0, journeyTitle: journeyTitleBySlug.get(p.slug) }));
   }
 
-  const { rows: similarJourneys } = await query(
-    `SELECT j.id, j.title, j.slug, j.learner_label, j.outcome, j.duration_weeks,
-            (CASE WHEN j.goal_id = $1 THEN 1 ELSE 0 END) AS goal_match,
-            (SELECT COUNT(*)::int FROM journey_starting_skills jss WHERE jss.journey_id = j.id AND jss.skill_id = ANY($2)) AS skill_overlap,
-            (SELECT COUNT(*)::int FROM journey_courses jc WHERE jc.journey_id = j.id) AS course_count,
-            (SELECT COUNT(*)::int FROM journey_projects jp WHERE jp.journey_id = j.id) AS project_count
-     FROM learning_journeys j
-     WHERE j.id NOT IN (SELECT journey_id FROM user_journeys WHERE user_id = $3)
-     ORDER BY goal_match DESC, skill_overlap DESC LIMIT 3`,
-    [profile?.goal_id || null, skillIds.length ? skillIds : [0], userId]
-  );
-
-  for (const j of similarJourneys) {
-    const { rows: chain } = await query(
-      'SELECT title FROM journey_steps WHERE journey_id = $1 ORDER BY order_index',
-      [j.id]
-    );
-    const { rows: startingSkills } = await query(
-      `SELECT COALESCE(jss.label, s.name) AS label FROM journey_starting_skills jss JOIN skills s ON s.id = jss.skill_id WHERE jss.journey_id = $1`,
-      [j.id]
-    );
-    j.stepChain = chain.map((c) => c.title);
-    j.startingSkills = startingSkills.map((s) => s.label);
-  }
-
   const { rows: recentActivity } = await query(
     `SELECT 'lesson_completed' AS kind, l.title AS label, lp.completed_at AS occurred_at,
             (SELECT j.title FROM journey_courses jc JOIN learning_journeys j ON j.id = jc.journey_id
@@ -246,7 +245,6 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
     recommendedCourses,
     recommendedProjects,
     suggestedAssessment,
-    similarJourneys,
     recentActivity,
     stats: overallStats[0],
   });

@@ -119,13 +119,22 @@ export function DashboardPage() {
         )}
       </section>
 
-      {/* Continue Learning — the single most relevant next step, never the next locked course */}
+      {/* Continue Learning — exactly where the learner is: which course, which lesson, how far in */}
       {currentCourse?.nextStep && (
         <section className="mt-14">
           <h2 className="font-display text-lg text-charcoal">Continue Learning</h2>
           <div className="mt-4 flex flex-col gap-4 rounded-2xl border border-border bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-medium text-charcoal">{currentCourse.nextStep.title}</p>
+              <p className="mt-1 text-sm text-charcoal-soft">
+                Course {currentCourse.nextStep.courseNumber} of {currentCourse.nextStep.totalCourses}
+                {currentCourse.nextStep.totalLessons > 0 && (
+                  <> · Lesson {currentCourse.nextStep.nextLessonNumber} of {currentCourse.nextStep.totalLessons}</>
+                )}
+              </p>
+              {currentCourse.nextStep.nextLessonTitle && (
+                <p className="mt-0.5 text-sm text-charcoal-soft">{currentCourse.nextStep.nextLessonTitle}</p>
+              )}
               <ProgressBar value={currentCourse.nextStep.progressPercent || 0} className="mt-2 max-w-xs" />
             </div>
             <Button to={`/courses/${currentCourse.nextStep.slug}`} className="shrink-0">Continue</Button>

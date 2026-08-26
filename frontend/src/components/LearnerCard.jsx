@@ -1,10 +1,8 @@
-import { Link } from 'react-router-dom';
+import { Button } from './Button.jsx';
 
 export function LearnerCard({ learner }) {
-  const topSkills = (learner.skillsGained || []).slice(0, 3);
-
   return (
-    <div className="group flex flex-col gap-3 rounded-2xl border border-border bg-white p-6 transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-lg hover:shadow-charcoal/5">
+    <div className="flex flex-col gap-3 rounded-2xl border border-border bg-white p-6 transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-lg hover:shadow-charcoal/5">
       <div className="flex items-center gap-3">
         <img src={learner.avatarUrl} alt="" className="h-10 w-10 shrink-0 rounded-full" />
         <div className="min-w-0">
@@ -14,22 +12,21 @@ export function LearnerCard({ learner }) {
       </div>
 
       <p className="text-sm text-charcoal-soft">
-        Started with <span className="text-charcoal">{learner.startingSkillLabel}</span>
+        Started as <span className="capitalize text-charcoal">{learner.startingLevel}</span> · Now{' '}
+        <span className="capitalize text-charcoal">{learner.currentLevel}</span>
       </p>
 
       <p className="text-sm text-charcoal-soft">
-        {learner.coursesCompleted} courses · {learner.projectsCompleted} projects
+        {learner.coursesCompleted}/{learner.totalCourses} courses · {learner.projectsCompleted}/{learner.totalProjects} projects
       </p>
 
-      {topSkills.length > 0 && <p className="text-sm text-charcoal-soft">{topSkills.join(' → ')}</p>}
-
-      <div className="mt-1 flex items-center gap-4 text-sm font-medium">
-        <Link to={`/journeys/${learner.journeySlug}`} className="text-accent-dark hover:underline">
+      <div className="mt-1 flex items-center gap-2">
+        <Button to={`/journeys/${learner.journeySlug}`} size="sm">
           View Journey
-        </Link>
-        <Link to={`/learners/${learner.id}`} className="text-charcoal-soft transition-colors group-hover:text-accent-dark">
+        </Button>
+        <Button to={`/learners/${learner.id}`} size="sm" variant="secondary">
           View Profile
-        </Link>
+        </Button>
       </div>
     </div>
   );

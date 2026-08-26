@@ -10,7 +10,7 @@ const router = Router();
 // anything beyond first name, avatar, and learning data - no age, location, or real contact info.
 async function buildLearnerSummary(userRow) {
   const { rows: journeyRows } = await query(
-    `SELECT j.id, j.title, j.slug, j.outcome, g.title AS goal_title
+    `SELECT j.id, j.title, j.slug, j.outcome, j.starting_level, g.title AS goal_title
      FROM user_journeys uj JOIN learning_journeys j ON j.id = uj.journey_id
      JOIN goals g ON g.id = j.goal_id
      WHERE uj.user_id = $1 ORDER BY uj.started_at DESC LIMIT 1`,
@@ -33,8 +33,10 @@ async function buildLearnerSummary(userRow) {
     query(
       `SELECT
          (SELECT COUNT(*)::int FROM enrollments WHERE user_id = $1 AND status = 'completed') AS courses_completed,
-         (SELECT COUNT(*)::int FROM user_projects WHERE user_id = $1 AND status = 'completed') AS projects_completed`,
-      [userRow.id]
+         (SELECT COUNT(*)::int FROM user_projects WHERE user_id = $1 AND status = 'completed') AS projects_completed,
+         (SELECT COUNT(*)::int FROM journey_courses WHERE journey_id = $2) AS total_courses,
+         (SELECT COUNT(*)::int FROM journey_projects WHERE journey_id = $2) AS total_projects`,
+      [userRow.id, journey.id]
     ),
   ]);
 
@@ -44,10 +46,13 @@ async function buildLearnerSummary(userRow) {
     avatarUrl: userRow.avatar_url,
     contactEmail: userRow.email,
     goalTitle: journey.goal_title,
+    startingLevel: journey.starting_level,
     startingSkillLabel: startingSkills.map((s) => s.label).join(', '),
     currentLevel: userRow.current_level,
     coursesCompleted: stats[0].courses_completed,
     projectsCompleted: stats[0].projects_completed,
+    totalCourses: stats[0].total_courses,
+    totalProjects: stats[0].total_projects,
     skillsGained: skillsGained.map((s) => s.name),
     currentPathTitle: journey.title,
     journeySlug: journey.slug,

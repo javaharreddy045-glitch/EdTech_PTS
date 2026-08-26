@@ -101,6 +101,10 @@ export function LearnerProfilePage() {
 
       <dl className="mt-8 grid grid-cols-2 gap-5 rounded-2xl border border-border bg-white p-6 sm:grid-cols-3">
         <div>
+          <dt className="text-xs text-charcoal-soft">Started as</dt>
+          <dd className="mt-1 text-sm font-medium capitalize text-charcoal">{learner.startingLevel}</dd>
+        </div>
+        <div>
           <dt className="text-xs text-charcoal-soft">Started with</dt>
           <dd className="mt-1 text-sm font-medium text-charcoal">{learner.startingSkillLabel}</dd>
         </div>
@@ -114,11 +118,11 @@ export function LearnerProfilePage() {
         </div>
         <div>
           <dt className="text-xs text-charcoal-soft">Courses completed</dt>
-          <dd className="mt-1 text-sm font-medium text-charcoal">{learner.coursesCompleted}</dd>
+          <dd className="mt-1 text-sm font-medium text-charcoal">{learner.coursesCompleted}/{learner.totalCourses}</dd>
         </div>
         <div>
           <dt className="text-xs text-charcoal-soft">Projects completed</dt>
-          <dd className="mt-1 text-sm font-medium text-charcoal">{learner.projectsCompleted}</dd>
+          <dd className="mt-1 text-sm font-medium text-charcoal">{learner.projectsCompleted}/{learner.totalProjects}</dd>
         </div>
       </dl>
 

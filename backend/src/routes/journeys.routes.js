@@ -14,7 +14,7 @@ const SORT_MAP = {
   alphabetical: 'j.title ASC',
 };
 
-async function attachJourneySummaries(journeyRows) {
+async function attachJourneySummaries(journeyRows, userId) {
   const ids = journeyRows.map((j) => j.id);
   if (ids.length === 0) return [];
 
@@ -31,10 +31,6 @@ async function attachJourneySummaries(journeyRows) {
      JOIN skills s ON s.id = jss.skill_id WHERE jss.journey_id = ANY($1)`,
     [ids]
   );
-  const { rows: skillChain } = await query(
-    `SELECT journey_id, order_index, title FROM journey_steps WHERE journey_id = ANY($1) ORDER BY order_index`,
-    [ids]
-  );
 
   const courseCountMap = Object.fromEntries(courseCounts.map((r) => [r.journey_id, r.count]));
   const projectCountMap = Object.fromEntries(projectCounts.map((r) => [r.journey_id, r.count]));
@@ -42,9 +38,14 @@ async function attachJourneySummaries(journeyRows) {
   for (const row of startingSkills) {
     (startingSkillsMap[row.journey_id] ||= []).push(row.label || row.name);
   }
-  const chainMap = {};
-  for (const row of skillChain) {
-    (chainMap[row.journey_id] ||= []).push(row.title);
+
+  let followingSet = new Set();
+  if (userId) {
+    const { rows: followingRows } = await query(
+      `SELECT journey_id FROM user_journeys WHERE user_id = $1 AND status = 'active' AND journey_id = ANY($2)`,
+      [userId, ids]
+    );
+    followingSet = new Set(followingRows.map((r) => r.journey_id));
   }
 
   return journeyRows.map((j) => ({
@@ -52,11 +53,11 @@ async function attachJourneySummaries(journeyRows) {
     courseCount: courseCountMap[j.id] || 0,
     projectCount: projectCountMap[j.id] || 0,
     startingSkills: startingSkillsMap[j.id] || [],
-    stepChain: chainMap[j.id] || [],
+    isFollowing: followingSet.has(j.id),
   }));
 }
 
-router.get('/', asyncHandler(async (req, res) => {
+router.get('/', optionalAuth, asyncHandler(async (req, res) => {
   const { search, goal, level, skill, minDuration, maxDuration, outcome, sort } = req.query;
 
   const conditions = [];
@@ -106,7 +107,7 @@ router.get('/', asyncHandler(async (req, res) => {
     params
   );
 
-  const journeys = await attachJourneySummaries(rows);
+  const journeys = await attachJourneySummaries(rows, req.user?.id);
   res.json({ journeys });
 }));
 
@@ -137,7 +138,7 @@ router.get('/similar', requireAuth, asyncHandler(async (req, res) => {
     [user?.current_goal_id || null, user?.current_level || null, skillIds.length ? skillIds : [0]]
   );
 
-  const journeys = await attachJourneySummaries(candidates);
+  const journeys = await attachJourneySummaries(candidates, req.user.id);
   res.json({ journeys });
 }));
 

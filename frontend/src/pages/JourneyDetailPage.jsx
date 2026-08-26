@@ -9,7 +9,7 @@ import { Skeleton } from '../components/Skeleton.jsx';
 
 const COURSE_STATUS = {
   completed: { label: '✓ Completed', cta: 'Review Course', dot: 'border-accent bg-accent text-white' },
-  active: { label: '→ In Progress', cta: 'Continue Course', dot: 'border-accent bg-white text-accent-dark' },
+  active: { label: '● Current', cta: 'Continue Course', dot: 'border-accent bg-white text-accent-dark' },
   available: { label: 'Ready to start', cta: 'Start Course', dot: 'border-accent bg-white text-accent-dark' },
   locked: { label: '🔒 Locked', cta: null, dot: 'border-border bg-white text-charcoal-soft' },
 };
