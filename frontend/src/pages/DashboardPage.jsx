@@ -142,7 +142,7 @@ export function DashboardPage() {
                 <h2 className="font-display text-lg text-charcoal">Recommended Courses</h2>
                 <Link to="/courses" className="text-xs font-medium text-accent-dark hover:underline">View all</Link>
               </div>
-              <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {data.recommendedCourses.map((course) => (
                   <CourseCard key={course.slug} course={course} />
                 ))}
@@ -155,7 +155,7 @@ export function DashboardPage() {
                 <h2 className="font-display text-lg text-charcoal">Recommended Projects</h2>
                 <Link to="/projects" className="text-xs font-medium text-accent-dark hover:underline">View all</Link>
               </div>
-              <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {data.recommendedProjects.map((project) => (
                   <ProjectCard key={project.slug} project={project} />
                 ))}

@@ -129,8 +129,8 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
     [userId]
   );
 
-  const courseSlugPlan = dedupeBySlug([...pathCourseSlugs, ...fallbackCourseSlugs.map((c) => ({ slug: c.slug }))]).slice(0, 2);
-  const projectSlugPlan = dedupeBySlug([...pathProjectSlugs, ...fallbackProjectSlugs.map((p) => ({ slug: p.slug }))]).slice(0, 2);
+  const courseSlugPlan = dedupeBySlug([...pathCourseSlugs, ...fallbackCourseSlugs.map((c) => ({ slug: c.slug }))]).slice(0, 3);
+  const projectSlugPlan = dedupeBySlug([...pathProjectSlugs, ...fallbackProjectSlugs.map((p) => ({ slug: p.slug }))]).slice(0, 3);
   const journeyTitleBySlug = new Map([...pathCourseSlugs, ...pathProjectSlugs].map((s) => [s.slug, s.journeyTitle]));
 
   let recommendedCourses = [];
