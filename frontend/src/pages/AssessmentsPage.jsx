@@ -34,19 +34,15 @@ export function AssessmentsPage() {
             {assessments.map((assessment) => {
               const result = latestResultBySlug[assessment.slug];
               return (
-                <div key={assessment.id} className="flex flex-col gap-3 rounded-2xl border border-border bg-white p-5">
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-accent-dark">{assessment.skill_name}</p>
-                    <h2 className="mt-1 font-display text-lg text-charcoal">{assessment.title}</h2>
-                    <p className="mt-1 text-sm text-charcoal-soft">{assessment.description}</p>
-                  </div>
-                  <p className="text-xs text-charcoal-soft">{assessment.question_count} questions</p>
+                <div key={assessment.id} className="flex flex-col gap-2 rounded-2xl border border-border bg-white p-5">
+                  <h2 className="font-display text-lg text-charcoal">{assessment.title}</h2>
+                  <p className="text-sm text-charcoal-soft">{assessment.question_count} questions · {assessment.skill_name}</p>
                   {result && (
                     <p className="text-sm text-accent-dark">
                       Last score: {result.score}% ({result.resulting_level})
                     </p>
                   )}
-                  <Button to={`/assessments/${assessment.slug}`} size="sm" className="mt-auto self-start">
+                  <Button to={`/assessments/${assessment.slug}`} size="sm" className="mt-2 self-start">
                     {result ? 'Retake' : 'Start Assessment'}
                   </Button>
                 </div>

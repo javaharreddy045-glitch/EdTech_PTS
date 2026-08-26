@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { goals, skills, instructors, courses, projects, journeys, assessments } from './seeds/data.js';
 import { buildLessonsForCourse } from './seeds/lessonTemplates.js';
 import { buildMilestonesForProject } from './seeds/projectMilestoneTemplates.js';
+import { pickImage, PROJECT_CATEGORY_BY_SLUG } from './seeds/imageLibrary.js';
 
 const { Pool } = pg;
 // Render's external database URLs require SSL; local/internal connections don't.
@@ -79,7 +80,7 @@ async function main() {
           c.difficulty,
           c.duration_hours,
           c.price,
-          `https://placehold.co/640x360/EDE7DA/2B2B28?text=${encodeURIComponent(c.title)}`,
+          pickImage(c.category, c.slug),
           c.learning_outcomes,
           c.project_count || 0,
         ]
@@ -132,7 +133,7 @@ async function main() {
           p.description,
           p.difficulty,
           p.estimated_hours,
-          `https://placehold.co/640x360/DDE5DD/2B2B28?text=${encodeURIComponent(p.title)}`,
+          pickImage(PROJECT_CATEGORY_BY_SLUG[p.slug], p.slug),
         ]
       );
       const projectId = rows[0].id;
