@@ -3,38 +3,19 @@ import { query } from '../config/db.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { requireAuth } from '../middleware/auth.js';
 import { notFound } from '../utils/errors.js';
+import { getJourneyTimeline } from '../utils/journeyTimeline.js';
 
 const router = Router();
 
 async function buildJourneyPath(userId, journey) {
-  const { rows: courseSteps } = await query(
-    `SELECT jc.order_index, 'course' AS type, c.id, c.title, c.slug, c.duration_hours,
-            COALESCE(e.status, 'not_started') AS status, COALESCE(e.progress_percent, 0) AS progress_percent
-     FROM journey_courses jc
-     JOIN courses c ON c.id = jc.course_id
-     LEFT JOIN enrollments e ON e.course_id = c.id AND e.user_id = $1
-     WHERE jc.journey_id = $2`,
-    [userId, journey.id]
-  );
-  const { rows: projectSteps } = await query(
-    `SELECT jp.order_index, 'project' AS type, p.id, p.title, p.slug, p.estimated_hours AS duration_hours,
-            COALESCE(up.status, 'not_started') AS status, COALESCE(up.progress_percent, 0) AS progress_percent
-     FROM journey_projects jp
-     JOIN projects p ON p.id = jp.project_id
-     LEFT JOIN user_projects up ON up.project_id = p.id AND up.user_id = $1
-     WHERE jp.journey_id = $2`,
-    [userId, journey.id]
-  );
-
-  // Projects are placed after all courses in the sequence (matches the seeded journey structure).
-  const steps = [...courseSteps.sort((a, b) => a.order_index - b.order_index), ...projectSteps.sort((a, b) => a.order_index - b.order_index)];
+  const steps = await getJourneyTimeline(userId, journey.id);
 
   const total = steps.length;
   const completed = steps.filter((s) => s.status === 'completed').length;
   const overallProgress = total > 0 ? Math.round((completed / total) * 100) : 0;
   const nextStep = steps.find((s) => s.status !== 'completed') || null;
-  const totalCourses = courseSteps.length;
-  const completedCourses = courseSteps.filter((s) => s.status === 'completed').length;
+  const totalCourses = steps.filter((s) => s.type === 'course').length;
+  const completedCourses = steps.filter((s) => s.type === 'course' && s.status === 'completed').length;
 
   return { journey, steps, overallProgress, nextStep, totalCourses, completedCourses };
 }

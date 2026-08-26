@@ -3,7 +3,7 @@ import { query } from '../config/db.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { requireAuth, optionalAuth } from '../middleware/auth.js';
 import { notFound } from '../utils/errors.js';
-import { getJourneyCourseStatuses } from '../utils/journeyCourseAccess.js';
+import { getJourneyTimeline } from '../utils/journeyTimeline.js';
 
 const router = Router();
 
@@ -156,8 +156,7 @@ router.get('/:slug', optionalAuth, asyncHandler(async (req, res) => {
     { rows: startingSkills },
     { rows: skillsGained },
     { rows: steps },
-    { rows: journeyCourses },
-    { rows: journeyProjects },
+    timeline,
   ] = await Promise.all([
     query(
       `SELECT s.id, s.name, jss.label FROM journey_starting_skills jss JOIN skills s ON s.id = jss.skill_id WHERE jss.journey_id = $1`,
@@ -169,25 +168,11 @@ router.get('/:slug', optionalAuth, asyncHandler(async (req, res) => {
       [journey.id]
     ),
     query('SELECT id, order_index, phase, title FROM journey_steps WHERE journey_id = $1 ORDER BY order_index', [journey.id]),
-    query(
-      `SELECT jc.order_index, c.id, c.title, c.slug, c.description, c.difficulty, c.duration_hours, c.image_url
-       FROM journey_courses jc JOIN courses c ON c.id = jc.course_id WHERE jc.journey_id = $1 ORDER BY jc.order_index`,
-      [journey.id]
-    ),
-    query(
-      `SELECT jp.order_index, p.id, p.title, p.slug, p.description, p.difficulty, p.estimated_hours, p.image_url
-       FROM journey_projects jp JOIN projects p ON p.id = jp.project_id WHERE jp.journey_id = $1 ORDER BY jp.order_index`,
-      [journey.id]
-    ),
+    getJourneyTimeline(req.user?.id, journey.id),
   ]);
 
-  const courseStatuses = await getJourneyCourseStatuses(req.user?.id, journey.id);
-  const statusByCourseId = new Map(courseStatuses.map((c) => [c.id, c]));
-  const journeyCoursesWithStatus = journeyCourses.map((c) => ({
-    ...c,
-    status: statusByCourseId.get(c.id)?.status || 'locked',
-    progressPercent: statusByCourseId.get(c.id)?.progressPercent || 0,
-  }));
+  const courseCount = timeline.filter((t) => t.type === 'course').length;
+  const projectCount = timeline.filter((t) => t.type === 'project').length;
 
   let followStatus = null;
   let isSaved = false;
@@ -204,9 +189,9 @@ router.get('/:slug', optionalAuth, asyncHandler(async (req, res) => {
     isSaved = savedRows.length > 0;
   }
 
-  const completedCourseCount = journeyCoursesWithStatus.filter((c) => c.status === 'completed').length;
-  const overallProgress = journeyCoursesWithStatus.length > 0
-    ? Math.round((completedCourseCount / journeyCoursesWithStatus.length) * 100)
+  const completedCourseCount = timeline.filter((t) => t.type === 'course' && t.status === 'completed').length;
+  const overallProgress = timeline.length > 0
+    ? Math.round((timeline.filter((t) => t.status === 'completed').length / timeline.length) * 100)
     : 0;
 
   res.json({
@@ -215,8 +200,9 @@ router.get('/:slug', optionalAuth, asyncHandler(async (req, res) => {
       startingSkills,
       skillsGained,
       steps,
-      courses: journeyCoursesWithStatus,
-      projects: journeyProjects,
+      timeline,
+      courseCount,
+      projectCount,
       overallProgress,
       completedCourseCount,
       followStatus,

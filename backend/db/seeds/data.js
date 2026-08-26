@@ -181,6 +181,9 @@ export const journeys = [
     ],
     courseSlugs: ['html-css-fundamentals', 'javascript-fundamentals', 'react-for-beginners', 'advanced-react-frontend', 'nodejs-express', 'postgresql-fundamentals', 'rest-api-development', 'building-full-stack-applications'],
     projectSlugs: ['personal-portfolio', 'task-management-application', 'full-stack-ecommerce-application'],
+    // Personal Portfolio right after HTML/CSS+JS; Task Management App after React is covered;
+    // the full e-commerce build caps the journey off at the very end (null = after last course).
+    projectPlacement: { 'personal-portfolio': 2, 'task-management-application': 4, 'full-stack-ecommerce-application': null },
     skillsGained: ['HTML', 'CSS', 'JavaScript', 'React', 'Node.js', 'Express', 'PostgreSQL', 'REST APIs', 'Full-Stack Development'],
   },
   {
@@ -207,6 +210,7 @@ export const journeys = [
     ],
     courseSlugs: ['python-for-data-science', 'statistics-for-machine-learning', 'numpy-pandas', 'machine-learning-fundamentals', 'deep-learning-pytorch', 'natural-language-processing', 'generative-ai-fundamentals', 'ai-capstone'],
     projectSlugs: ['house-price-prediction-model', 'image-classification-model', 'ai-question-answering-application'],
+    projectPlacement: { 'house-price-prediction-model': 4, 'image-classification-model': 5, 'ai-question-answering-application': null },
     skillsGained: ['Python', 'Statistics', 'NumPy', 'Pandas', 'Machine Learning', 'PyTorch', 'Deep Learning', 'NLP', 'Generative AI'],
   },
   {
@@ -233,6 +237,7 @@ export const journeys = [
     ],
     courseSlugs: ['design-fundamentals', 'introduction-to-ux', 'user-research', 'figma-fundamentals', 'wireframing-prototyping', 'design-systems', 'usability-testing', 'product-design-portfolio'],
     projectSlugs: ['mobile-banking-app-redesign', 'ecommerce-checkout-redesign', 'saas-product-design'],
+    projectPlacement: { 'mobile-banking-app-redesign': 5, 'ecommerce-checkout-redesign': 7, 'saas-product-design': null },
     skillsGained: ['UX Design', 'UI Design', 'Figma', 'User Research', 'Wireframing', 'Prototyping', 'Design Systems', 'Usability Testing'],
   },
   {
@@ -259,6 +264,7 @@ export const journeys = [
     ],
     courseSlugs: ['advanced-excel', 'sql-fundamentals', 'data-cleaning', 'statistics-for-data-analysis', 'python-for-data-analysis', 'power-bi-fundamentals', 'data-visualization', 'business-analytics-capstone'],
     projectSlugs: ['sales-performance-dashboard', 'customer-churn-analysis', 'business-intelligence-dashboard'],
+    projectPlacement: { 'sales-performance-dashboard': 2, 'customer-churn-analysis': 5, 'business-intelligence-dashboard': null },
     skillsGained: ['Excel', 'SQL', 'Data Cleaning', 'Statistics', 'Python', 'Pandas', 'Power BI', 'Data Visualization'],
   },
   {
@@ -285,6 +291,7 @@ export const journeys = [
     ],
     courseSlugs: ['marketing-fundamentals', 'content-marketing', 'seo-fundamentals', 'social-media-marketing', 'google-ads', 'email-marketing', 'marketing-analytics', 'digital-marketing-campaign'],
     projectSlugs: ['seo-strategy', 'social-media-campaign', 'complete-digital-marketing-campaign'],
+    projectPlacement: { 'seo-strategy': 3, 'social-media-campaign': 4, 'complete-digital-marketing-campaign': null },
     skillsGained: ['Marketing', 'Content Marketing', 'SEO', 'Social Media Marketing', 'Google Ads', 'Email Marketing', 'Marketing Analytics'],
   },
 ];

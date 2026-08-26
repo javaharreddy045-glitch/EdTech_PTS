@@ -230,9 +230,10 @@ async function main() {
 
       for (const [idx, slug] of j.projectSlugs.entries()) {
         const projectId = projectMap.get(slug);
+        const insertAfterCourseIndex = j.projectPlacement?.[slug] ?? null;
         await client.query(
-          'INSERT INTO journey_projects (journey_id, project_id, order_index) VALUES ($1,$2,$3)',
-          [journeyId, projectId, idx + 1]
+          'INSERT INTO journey_projects (journey_id, project_id, order_index, insert_after_course_order_index) VALUES ($1,$2,$3,$4)',
+          [journeyId, projectId, idx + 1, insertAfterCourseIndex]
         );
       }
     }

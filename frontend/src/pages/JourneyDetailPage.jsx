@@ -14,6 +14,13 @@ const COURSE_STATUS = {
   locked: { label: '🔒 Locked', cta: null, dot: 'border-border bg-white text-charcoal-soft' },
 };
 
+const PROJECT_STATUS = {
+  completed: { label: '✓ Completed', cta: 'Review Project', dot: 'border-accent bg-accent text-white' },
+  active: { label: '● In progress', cta: 'Continue Project', dot: 'border-accent bg-white text-accent-dark' },
+  available: { label: 'Ready to start', cta: 'Start Project', dot: 'border-accent bg-white text-accent-dark' },
+  locked: { label: '🔒 Locked', cta: null, dot: 'border-border bg-white text-charcoal-soft' },
+};
+
 function CoursePathCard({ course, index, onSkip, skippingId }) {
   const meta = COURSE_STATUS[course.status] || COURSE_STATUS.locked;
   return (
@@ -48,6 +55,44 @@ function CoursePathCard({ course, index, onSkip, skippingId }) {
           {meta.cta ? (
             <Link
               to={`/courses/${course.slug}`}
+              className="rounded-full border border-border px-4 py-2 text-sm font-medium text-charcoal transition-colors hover:border-accent hover:text-accent-dark"
+            >
+              {meta.cta}
+            </Link>
+          ) : (
+            <span className="rounded-full border border-border px-4 py-2 text-sm text-charcoal-soft">Locked</span>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function ProjectPathCard({ project, index }) {
+  const meta = PROJECT_STATUS[project.status] || PROJECT_STATUS.locked;
+  return (
+    <li className="relative">
+      <span
+        className={`absolute -left-[calc(1.5rem+9px)] top-6 flex h-4 w-4 items-center justify-center rounded-full border-2 ${meta.dot}`}
+        aria-hidden="true"
+      />
+      <div className="flex flex-col gap-3 rounded-2xl border border-accent/30 bg-accent/5 p-5 transition-colors hover:border-accent/50 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-4">
+          <span className="font-display text-lg text-charcoal-soft">{String(index + 1).padStart(2, '0')}</span>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-accent-dark">Project</p>
+            <p className="mt-0.5 font-medium text-charcoal">{project.title}</p>
+            {project.description && <p className="mt-1 line-clamp-1 text-sm text-charcoal-soft">{project.description}</p>}
+            <p className="mt-1.5 text-xs text-charcoal-soft">
+              {meta.label}
+              {project.status === 'active' && ` · ${Math.round(project.progressPercent)}%`}
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2 pl-9 sm:pl-0">
+          {meta.cta ? (
+            <Link
+              to={`/projects/${project.slug}`}
               className="rounded-full border border-border px-4 py-2 text-sm font-medium text-charcoal transition-colors hover:border-accent hover:text-accent-dark"
             >
               {meta.cta}
@@ -172,7 +217,7 @@ export function JourneyDetailPage() {
         </div>
         <div>
           <p className="text-xs text-charcoal-soft">Courses · Projects</p>
-          <p className="mt-1 text-sm font-medium text-charcoal">{journey.courses.length} · {journey.projects.length}</p>
+          <p className="mt-1 text-sm font-medium text-charcoal">{journey.courseCount} · {journey.projectCount}</p>
         </div>
         <div>
           <p className="text-xs text-charcoal-soft">Outcome</p>
@@ -191,9 +236,13 @@ export function JourneyDetailPage() {
         <h2 className="font-display text-xl text-charcoal">Learning Path</h2>
         <p className="mt-1 text-sm text-charcoal-soft">Where you started, what's done, and what comes next.</p>
         <ol className="mt-6 flex flex-col gap-4 border-l-2 border-border pl-6 sm:pl-8">
-          {journey.courses.map((course, i) => (
-            <CoursePathCard key={course.id} course={course} index={i} onSkip={handleSkip} skippingId={skippingId} />
-          ))}
+          {journey.timeline.map((step, i) =>
+            step.type === 'project' ? (
+              <ProjectPathCard key={`project-${step.id}`} project={step} index={i} />
+            ) : (
+              <CoursePathCard key={`course-${step.id}`} course={step} index={i} onSkip={handleSkip} skippingId={skippingId} />
+            )
+          )}
         </ol>
       </div>
 

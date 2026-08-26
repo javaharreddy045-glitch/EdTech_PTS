@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { query } from '../config/db.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { requireAuth } from '../middleware/auth.js';
+import { getJourneyTimeline } from '../utils/journeyTimeline.js';
 
 const router = Router();
 
@@ -10,23 +11,8 @@ const router = Router();
 async function buildActivePathSummary(userId, uj) {
   const journeyId = uj.journey_id;
 
-  const [{ rows: courseRows }, { rows: projectRows }, { rows: activityRows }] = await Promise.all([
-    query(
-      `SELECT c.id, c.title, c.slug, c.difficulty, c.duration_hours, jc.order_index,
-              COALESCE(e.status, 'not_started') AS status, COALESCE(e.progress_percent, 0) AS progress_percent
-       FROM journey_courses jc JOIN courses c ON c.id = jc.course_id
-       LEFT JOIN enrollments e ON e.course_id = c.id AND e.user_id = $1
-       WHERE jc.journey_id = $2 ORDER BY jc.order_index`,
-      [userId, journeyId]
-    ),
-    query(
-      `SELECT p.id, p.title, p.slug, p.difficulty, p.estimated_hours, jp.order_index,
-              COALESCE(up.status, 'not_started') AS status
-       FROM journey_projects jp JOIN projects p ON p.id = jp.project_id
-       LEFT JOIN user_projects up ON up.project_id = p.id AND up.user_id = $1
-       WHERE jp.journey_id = $2 ORDER BY jp.order_index`,
-      [userId, journeyId]
-    ),
+  const [timeline, { rows: activityRows }] = await Promise.all([
+    getJourneyTimeline(userId, journeyId),
     query(
       `SELECT GREATEST(
          COALESCE((SELECT MAX(lp.completed_at) FROM lesson_progress lp
@@ -41,25 +27,23 @@ async function buildActivePathSummary(userId, uj) {
     ),
   ]);
 
-  const totalSteps = courseRows.length + projectRows.length;
-  const completedSteps = courseRows.filter((c) => c.status === 'completed').length
-    + projectRows.filter((p) => p.status === 'completed').length;
+  const courseSteps = timeline.filter((s) => s.type === 'course');
+  const totalSteps = timeline.length;
+  const completedSteps = timeline.filter((s) => s.status === 'completed').length;
   const overallProgress = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
-  const completedCourses = courseRows.filter((c) => c.status === 'completed').length;
+  const completedCourses = courseSteps.filter((c) => c.status === 'completed').length;
 
-  // The learner's current course is whichever one isn't finished yet, in order - never the
-  // next locked course. A course they're actively enrolled in but haven't finished always
-  // takes priority over one they haven't started.
-  const nextCourse = courseRows.find((c) => c.status !== 'completed');
-  const nextProject = !nextCourse ? projectRows.find((p) => p.status !== 'completed') : null;
+  // The learner's current step is whichever one isn't finished yet, in the journey's actual
+  // display order - this can be a project placed mid-journey, not only a course.
+  const nextStep = timeline.find((s) => s.status !== 'completed') || null;
 
   let lessonDetail = null;
-  if (nextCourse) {
+  if (nextStep?.type === 'course') {
     const { rows: lessons } = await query(
       `SELECT l.id, l.title, COALESCE(lp.completed, false) AS completed
        FROM lessons l LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.user_id = $1
        WHERE l.course_id = $2 ORDER BY l.order_index`,
-      [userId, nextCourse.id]
+      [userId, nextStep.id]
     );
     const completedLessons = lessons.filter((l) => l.completed).length;
     const nextLesson = lessons.find((l) => !l.completed) || null;
@@ -71,22 +55,14 @@ async function buildActivePathSummary(userId, uj) {
     };
   }
 
-  const nextStep = nextCourse
+  const nextStepWithDetail = nextStep && nextStep.type === 'course'
     ? {
-        type: 'course',
-        title: nextCourse.title,
-        slug: nextCourse.slug,
-        status: nextCourse.status,
-        difficulty: nextCourse.difficulty,
-        durationHours: nextCourse.duration_hours,
-        progressPercent: nextCourse.progress_percent,
-        courseNumber: nextCourse.order_index,
-        totalCourses: courseRows.length,
+        ...nextStep,
+        courseNumber: courseSteps.findIndex((c) => c.id === nextStep.id) + 1,
+        totalCourses: courseSteps.length,
         ...lessonDetail,
       }
-    : nextProject
-      ? { type: 'project', title: nextProject.title, slug: nextProject.slug, status: nextProject.status, difficulty: nextProject.difficulty, durationHours: nextProject.estimated_hours }
-      : null;
+    : nextStep;
 
   return {
     id: journeyId,
@@ -94,12 +70,12 @@ async function buildActivePathSummary(userId, uj) {
     slug: uj.slug,
     description: uj.description,
     outcome: uj.outcome,
-    totalCourses: courseRows.length,
+    totalCourses: courseSteps.length,
     completedCourses,
     totalSteps,
     completedSteps,
     overallProgress,
-    nextStep,
+    nextStep: nextStepWithDetail,
     lastActivityAt: activityRows[0]?.last_activity_at || uj.started_at,
   };
 }
